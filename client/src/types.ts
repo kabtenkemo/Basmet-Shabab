@@ -17,7 +17,7 @@ export type SectionKey =
   | 'reports'
   | 'profile';
 
-export type ThemeMode = 'dark' | 'light';
+export type ThemeMode = 'dark';
 
 export type AuthResponse = {
   memberId: string;

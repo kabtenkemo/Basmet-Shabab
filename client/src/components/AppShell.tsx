@@ -1,4 +1,4 @@
-import { FiActivity, FiBarChart2, FiCheckSquare, FiLayers, FiLogOut, FiMenu, FiMoon, FiSearch, FiShield, FiUsers, FiMessageSquare, FiUser, FiFileText } from 'react-icons/fi';
+import { FiActivity, FiBarChart2, FiCheckSquare, FiLayers, FiLogOut, FiMenu, FiSearch, FiShield, FiUsers, FiMessageSquare, FiUser, FiFileText } from 'react-icons/fi';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '../context/AppContext';
 import type { SectionKey } from '../types';
@@ -16,9 +16,9 @@ const icons: Record<string, ReactNode> = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, navigation, section, setSection, theme, toggleTheme, logout, search, setSearch, error, clearError } = useApp();
+  const { user, navigation, section, setSection, logout, search, setSearch, error, clearError } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
-  const isLight = theme === 'light';
+  const isLight = false;
 
   const currentTitle = useMemo(() => {
     return navigation.find((item) => item.key === section)?.label ?? 'لوحة التحكم';
@@ -98,9 +98,6 @@ export function AppShell({ children }: { children: ReactNode }) {
               </div>
             </div>
 
-            <button type="button" className={`rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'}`} onClick={toggleTheme} aria-label="toggle theme">
-              {theme === 'dark' ? <FiMoon /> : <FiFileText />}
-            </button>
             <button type="button" className={`rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'}`} onClick={logout} aria-label="logout">
               <FiLogOut />
             </button>

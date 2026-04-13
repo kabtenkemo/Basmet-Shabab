@@ -1677,7 +1677,7 @@ function AuditLogsPage() {
 }
 
 function ProfilePage() {
-  const { user, dashboard, theme, toggleTheme, activityLogs } = useApp();
+  const { user, dashboard, activityLogs } = useApp();
 
   return (
     <div className="space-y-6">
@@ -1697,7 +1697,6 @@ function ProfilePage() {
               <StatCard label="الدور" value={user?.role ?? '—'} accent="brand" />
               <StatCard label="النقاط" value={user?.points ?? 0} accent="success" />
             </div>
-            <Button className="w-full" variant="secondary" onClick={toggleTheme}>تبديل الوضع إلى {theme === 'dark' ? 'الفاتح' : 'الداكن'}</Button>
           </div>
         </Card>
 

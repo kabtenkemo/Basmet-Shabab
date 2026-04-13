@@ -43,7 +43,6 @@ import type {
   ThemeMode
 } from '../types';
 
-const themeKey = 'team-management-theme';
 const defaultSearch = '';
 
 const roleOrder: Record<string, number> = {
@@ -81,7 +80,6 @@ interface AppContextValue {
   navigation: NavigationItem[];
   setSection: (section: SectionKey) => void;
   setSearch: (value: string) => void;
-  toggleTheme: () => void;
   loginUser: (email: string, password: string) => Promise<void>;
   logout: () => void;
   refresh: () => Promise<void>;
@@ -175,7 +173,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [myComplaints, setMyComplaints] = useState<ComplaintItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
   const [section, setSection] = useState<SectionKey>('overview');
-  const [theme, setTheme] = useState<ThemeMode>((localStorage.getItem(themeKey) as ThemeMode) ?? 'dark');
+  const theme: ThemeMode = 'dark';
   const [search, setSearch] = useState(defaultSearch);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -291,10 +289,9 @@ export function AppProvider({ children }: PropsWithChildren) {
   }, [section, token]);
 
   useEffect(() => {
-    document.documentElement.classList.toggle('dark', theme === 'dark');
+    document.documentElement.classList.add('dark');
     document.documentElement.dir = 'rtl';
     document.documentElement.lang = 'ar';
-    localStorage.setItem(themeKey, theme);
   }, [theme]);
 
   useEffect(() => {
@@ -562,7 +559,6 @@ export function AppProvider({ children }: PropsWithChildren) {
     navigation,
     setSection,
     setSearch,
-    toggleTheme: () => setTheme((current) => (current === 'dark' ? 'light' : 'dark')),
     loginUser,
     logout,
     refresh: () => loadSession(),
