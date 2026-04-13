@@ -329,9 +329,13 @@ function PasswordChangeView() {
   };
 
   const message = formError || error;
+  const subtitle = user?.mustChangePassword ? 'Mandatory security step' : 'تحديث كلمة المرور';
+  const note = user?.mustChangePassword
+    ? 'الحساب الحالي يستخدم كلمة مرور مؤقتة.'
+    : 'يمكنك تحديث كلمة المرور في أي وقت من هنا.';
 
   return (
-    <Card title="تغيير كلمة المرور" subtitle="Mandatory security step" className="w-full">
+    <Card title="تغيير كلمة المرور" subtitle={subtitle} className="w-full">
       <form className="space-y-4" onSubmit={submit}>
         <Field label="كلمة المرور الحالية">
           <Input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" placeholder="••••••••" />
@@ -351,7 +355,7 @@ function PasswordChangeView() {
       </form>
 
       <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
-        الحساب الحالي {user?.fullName ? `لـ ${user.fullName}` : ''} يستخدم كلمة مرور مؤقتة.
+        {note} {user?.fullName ? `الحساب الحالي لـ ${user.fullName}.` : ''}
       </div>
     </Card>
   );
@@ -1677,13 +1681,13 @@ function AuditLogsPage() {
 }
 
 function ProfilePage() {
-  const { user, dashboard, activityLogs } = useApp();
+  const { user, dashboard, leaderboard, activityLogs } = useApp();
 
   return (
     <div className="space-y-6">
       <SectionTitle eyebrow={pageTitles.profile.eyebrow} title={pageTitles.profile.title} description={pageTitles.profile.description} />
 
-      {user?.mustChangePassword && <PasswordChangeView />}
+      <PasswordChangeView />
 
       <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <Card title="بيانات الحساب" subtitle="Profile">
@@ -1701,6 +1705,22 @@ function ProfilePage() {
         </Card>
 
         <div className="space-y-6">
+          <Card title="أفضل المتصدرين" subtitle="Top 10">
+            <div className="space-y-3">
+              {leaderboard.length === 0 ? (
+                <EmptyState title="لا توجد بيانات بعد" description="ستظهر قائمة المتصدرين هنا عند توفر النقاط." />
+              ) : leaderboard.map((entry) => (
+                <div key={entry.memberId} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                  <div>
+                    <p className="font-bold text-white">#{entry.rank} {entry.fullName}</p>
+                    <p className="text-sm text-slate-400">{roleLabel(entry.role)}</p>
+                  </div>
+                  <Badge tone="success">{entry.points} نقطة</Badge>
+                </div>
+              ))}
+            </div>
+          </Card>
+
           <Card title="الصلاحيات" subtitle="Permissions">
             <div className="max-h-48 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3 scrollbar-thin">
               <ul className="space-y-2 text-sm text-slate-200">
