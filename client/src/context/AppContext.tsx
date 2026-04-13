@@ -102,6 +102,7 @@ const AppContext = createContext<AppContextValue | undefined>(undefined);
 
 const sectionLabels: Record<SectionKey, string> = {
   overview: 'الملخص',
+  leaderboard: 'المتصدرين',
   news: 'الأخبار',
   members: 'الأعضاء',
   tasks: 'المهام',
@@ -114,6 +115,7 @@ const sectionLabels: Record<SectionKey, string> = {
 
 const navigationSeed: NavigationItem[] = [
   { key: 'overview', label: 'الملخص', icon: 'grid', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
+  { key: 'leaderboard', label: 'المتصدرين', icon: 'leaderboard', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'news', label: 'الأخبار', icon: 'news', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'members', label: 'الأعضاء', icon: 'users', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator'] },
   { key: 'tasks', label: 'المهام', icon: 'check', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },

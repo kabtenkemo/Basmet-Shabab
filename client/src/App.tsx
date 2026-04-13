@@ -59,6 +59,15 @@ const roleLabels: Record<Role, string> = {
   CommitteeMember: 'عضو لجنة'
 };
 
+const leaderboardRoles: Role[] = [
+  'President',
+  'VicePresident',
+  'CentralMember',
+  'GovernorCoordinator',
+  'GovernorCommitteeCoordinator',
+  'CommitteeMember'
+];
+
 const taskAudienceLabels: Record<TaskAudienceType, string> = {
   All: 'للجميع',
   Members: 'لأعضاء معينين',
@@ -95,6 +104,11 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string; descripti
     eyebrow: 'Dashboard',
     title: 'لوحة متابعة شاملة بالعربية وبتنظيم هرمي واضح',
     description: 'عرض سريع للأعضاء والمهام والشكاوى والمتصدرين مع واجهة RTL جاهزة للعرض والاستخدام اليومي.'
+  },
+  leaderboard: {
+    eyebrow: 'Leaderboard',
+    title: 'المتصدرين حسب المناصب',
+    description: 'عرض واضح يبين عدد الأعضاء وترتيبهم داخل كل منصب حتى يكون ظاهرًا للجميع.'
   },
   news: {
     eyebrow: 'News',
@@ -434,6 +448,62 @@ function OverviewPage() {
             ))}
           </div>
         )}
+      </Card>
+    </div>
+  );
+}
+
+function LeaderboardPage() {
+  const { dashboard, leaderboard } = useApp();
+  const roleBuckets = leaderboardRoles.map((role) => ({
+    role,
+    entries: leaderboard.filter((entry) => entry.role === role),
+  }));
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow={pageTitles.leaderboard.eyebrow}
+        title={pageTitles.leaderboard.title}
+        description={pageTitles.leaderboard.description}
+      />
+
+      <div className="grid gap-4 md:grid-cols-3">
+        <StatCard label="إجمالي الأعضاء" value={dashboard?.totalMembers ?? 0} accent="brand" />
+        <StatCard label="المتصدرون المعروضون" value={leaderboard.length} accent="success" />
+        <StatCard label="أعلى نقاط" value={leaderboard[0]?.points ?? 0} accent="amber" />
+      </div>
+
+      <Card title="المتصدرون حسب المنصب" subtitle="All roles">
+        <div className="space-y-4">
+          {roleBuckets.map(({ role, entries }) => (
+            <div key={role} className="rounded-3xl border border-white/10 bg-white/5 p-4">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-brand-300/75">{roleLabel(role)}</p>
+                  <p className="mt-1 text-sm text-slate-400">{entries.length} عضو</p>
+                </div>
+                <Badge tone="neutral">{entries.length}</Badge>
+              </div>
+
+              {entries.length === 0 ? (
+                <EmptyState title="لا يوجد أعضاء" description="لم يتم تسجيل أعضاء في هذا المنصب بعد." />
+              ) : (
+                <div className="space-y-3">
+                  {entries.slice(0, 3).map((entry) => (
+                    <div key={entry.memberId} className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">
+                      <div>
+                        <p className="font-bold text-white">#{entry.rank} {entry.fullName}</p>
+                        <p className="text-sm text-slate-400">{roleLabel(entry.role)}</p>
+                      </div>
+                      <Badge tone="success">{entry.points} نقطة</Badge>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
       </Card>
     </div>
   );
@@ -1705,7 +1775,11 @@ function ProfilePage() {
         </Card>
 
         <div className="space-y-6">
-          <Card title="أفضل المتصدرين" subtitle="Top 10">
+          <Card
+            title="أفضل المتصدرين"
+            subtitle="Top 10"
+            actions={<Badge tone="neutral">{leaderboard.length} عضو</Badge>}
+          >
             <div className="space-y-3">
               {leaderboard.length === 0 ? (
                 <EmptyState title="لا توجد بيانات بعد" description="ستظهر قائمة المتصدرين هنا عند توفر النقاط." />
@@ -1771,6 +1845,7 @@ export default function App() {
 
   const content: Record<SectionKey, ReactElement> = {
     overview: <OverviewPage />,
+    leaderboard: <LeaderboardPage />,
     news: <NewsPage />,
     members: <MembersPage />,
     tasks: <TasksPage />,

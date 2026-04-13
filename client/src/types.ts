@@ -8,6 +8,7 @@ export type Role =
 
 export type SectionKey =
   | 'overview'
+  | 'leaderboard'
   | 'news'
   | 'members'
   | 'tasks'
