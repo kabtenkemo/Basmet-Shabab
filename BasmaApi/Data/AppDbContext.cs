@@ -55,6 +55,10 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<NewsTargetMember> NewsTargetMembers => Set<NewsTargetMember>();
 
+    public DbSet<Suggestion> Suggestions => Set<Suggestion>();
+
+    public DbSet<SuggestionVote> SuggestionVotes => Set<SuggestionVote>();
+
     public override int SaveChanges()
     {
         AppendAuditLogs();

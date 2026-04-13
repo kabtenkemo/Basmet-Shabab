@@ -16,6 +16,7 @@ export type SectionKey =
   | 'auditlogs'
   | 'committees'
   | 'reports'
+  | 'suggestions'
   | 'profile';
 
 export type ThemeMode = 'dark';
