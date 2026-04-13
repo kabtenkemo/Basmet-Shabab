@@ -1,6 +1,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
 import {
   adjustPoints,
+  changePassword as submitPasswordChangeRequest,
   createComplaint,
   createMember,
   createNews,
@@ -88,6 +89,7 @@ interface AppContextValue {
   changeRole: (memberId: string, role: string) => Promise<void>;
   assignPermission: (memberId: string, permissionKey: string) => Promise<void>;
   changePoints: (memberId: string, form: PointFormState) => Promise<void>;
+  changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   createTaskItem: (form: TaskFormState) => Promise<void>;
   updateTaskItem: (id: string, form: TaskFormState) => Promise<void>;
   deleteTaskItem: (id: string) => Promise<void>;
@@ -157,7 +159,8 @@ function mapMemberProfile(profile: DashboardMe): MemberInfo {
     governorName: profile.governorName,
     committeeName: profile.committeeName,
     points: profile.points,
-    permissions: profile.permissions
+    permissions: profile.permissions,
+    mustChangePassword: profile.mustChangePassword
   };
 }
 
@@ -229,6 +232,16 @@ export function AppProvider({ children }: PropsWithChildren) {
       const currentMember = mapMemberProfile(profile);
 
       setUser(currentMember);
+
+      if (currentMember.mustChangePassword) {
+        setDashboard(null);
+        setMembers([]);
+        setTasks([]);
+        setComplaints([]);
+        setNews([]);
+        setMyComplaints([]);
+        return;
+      }
 
       const [dashboardResult, tasksResult, complaintsResult, newsResult] = await Promise.allSettled([
         getDashboard(),
@@ -327,7 +340,8 @@ export function AppProvider({ children }: PropsWithChildren) {
         governorName: response.governorName,
         committeeName: response.committeeName,
         points: response.points,
-        permissions: response.permissions
+        permissions: response.permissions,
+        mustChangePassword: response.mustChangePassword
       });
       setToken(response.token);
       setStoredToken(response.token);
@@ -371,6 +385,21 @@ export function AppProvider({ children }: PropsWithChildren) {
       setLoading(false);
     }
   }, [appendActivity, loadSession]);
+
+  const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      await submitPasswordChangeRequest(currentPassword, newPassword);
+      appendActivity('تغيير كلمة المرور', 'تم تغيير كلمة المرور الإلزامية بنجاح', 'success');
+      await loadSession(token);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'تعذر تغيير كلمة المرور');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession, token]);
 
   const changeRole = useCallback(async (memberId: string, role: string) => {
     setLoading(true);
@@ -541,6 +570,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     changeRole,
     assignPermission,
     changePoints,
+    changePassword,
     createTaskItem,
     updateTaskItem,
     deleteTaskItem,
@@ -583,6 +613,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     user,
     changePoints,
     changeRole,
+    changePassword,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

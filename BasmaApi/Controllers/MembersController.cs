@@ -128,7 +128,8 @@ public sealed class MembersController : ControllerBase
             GovernorName = scopeResult.GovernorName,
             CommitteeName = scopeResult.CommitteeName,
             CreatedByMemberId = currentMember.Id,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("123")
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("123"),
+            MustChangePassword = true
         };
 
         _dbContext.Members.Add(member);
@@ -275,7 +276,8 @@ public sealed class MembersController : ControllerBase
             member.GovernorName,
             member.CommitteeName,
             member.Points,
-            AccessControl.GetEffectivePermissions(member));
+            AccessControl.GetEffectivePermissions(member),
+            member.MustChangePassword);
     }
 
     private static MemberListItemResponse MapListItem(Member member)
@@ -291,6 +293,7 @@ public sealed class MembersController : ControllerBase
             member.CommitteeName,
             member.Points,
             AccessControl.GetEffectivePermissions(member),
+            member.MustChangePassword,
             member.CreatedAtUtc);
     }
 

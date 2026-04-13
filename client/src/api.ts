@@ -93,6 +93,10 @@ export async function login(email: string, password: string) {
   return unwrap(api.post<AuthResponse>('/api/auth/login', { email, password }));
 }
 
+export async function changePassword(currentPassword: string, newPassword: string) {
+  return unwrap(api.post('/api/auth/change-password', { currentPassword, newPassword }));
+}
+
 export async function getMe() {
   return unwrap(api.get<DashboardMe>('/api/members/me'));
 }

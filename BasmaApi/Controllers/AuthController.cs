@@ -70,8 +70,47 @@ public sealed class AuthController : ControllerBase
             member.CommitteeName,
             member.Points,
             AccessControl.GetEffectivePermissions(member),
+            member.MustChangePassword,
             token,
             expiresAtUtc));
+    }
+
+    [HttpPost("change-password")]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request, CancellationToken cancellationToken)
+    {
+        var member = await GetCurrentMemberAsync(cancellationToken);
+        if (member is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!_passwordService.VerifyPassword(request.CurrentPassword, member.PasswordHash))
+        {
+            return BadRequest(new { message = "كلمة المرور الحالية غير صحيحة." });
+        }
+
+        if (string.Equals(request.CurrentPassword, request.NewPassword, StringComparison.Ordinal))
+        {
+            return BadRequest(new { message = "كلمة المرور الجديدة يجب أن تكون مختلفة عن الحالية." });
+        }
+
+        member.PasswordHash = _passwordService.HashPassword(request.NewPassword);
+        member.MustChangePassword = false;
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        await _auditLogService.RecordAsync(
+            "ChangePassword",
+            "Member",
+            member.Id,
+            member.FullName,
+            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            member.Id.ToString(),
+            new { MustChangePassword = true },
+            new { MustChangePassword = false },
+            cancellationToken);
+
+        return Ok(new { message = "تم تغيير كلمة المرور بنجاح." });
     }
 
     [HttpGet("me")]
@@ -102,6 +141,20 @@ public sealed class AuthController : ControllerBase
             member.GovernorName,
             member.CommitteeName,
             member.Points,
-            AccessControl.GetEffectivePermissions(member)));
+            AccessControl.GetEffectivePermissions(member),
+            member.MustChangePassword));
+    }
+
+    private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)
+    {
+        var memberId = User.GetMemberId();
+        if (memberId is null)
+        {
+            return null;
+        }
+
+        return await _dbContext.Members
+            .Include(item => item.PermissionGrants)
+            .FirstOrDefaultAsync(item => item.Id == memberId.Value, cancellationToken);
     }
 }

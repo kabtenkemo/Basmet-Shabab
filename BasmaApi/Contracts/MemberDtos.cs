@@ -10,7 +10,8 @@ public sealed record MemberSummaryResponse(
     string? GovernorName,
     string? CommitteeName,
     int Points,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    bool MustChangePassword);
 
 public sealed record MemberListItemResponse(
     Guid MemberId,
@@ -23,4 +24,5 @@ public sealed record MemberListItemResponse(
     string? CommitteeName,
     int Points,
     IReadOnlyList<string> Permissions,
+    bool MustChangePassword,
     DateTime CreatedAtUtc);

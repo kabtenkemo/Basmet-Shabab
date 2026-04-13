@@ -26,4 +26,5 @@ public sealed record DashboardMeResponse(
     string? GovernorName,
     string? CommitteeName,
     int Points,
-    IReadOnlyList<string> Permissions);
+    IReadOnlyList<string> Permissions,
+    bool MustChangePassword);

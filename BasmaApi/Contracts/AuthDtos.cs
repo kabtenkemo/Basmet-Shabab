@@ -34,8 +34,18 @@ public sealed record AuthResponse(
     string? CommitteeName,
     int Points,
     IReadOnlyList<string> Permissions,
+    bool MustChangePassword,
     string Token,
     DateTime ExpiresAtUtc);
+
+public sealed class ChangePasswordRequest
+{
+    [Required]
+    public string CurrentPassword { get; init; } = string.Empty;
+
+    [Required, MinLength(8)]
+    public string NewPassword { get; init; } = string.Empty;
+}
 
 public sealed class MemberCreateRequest
 {

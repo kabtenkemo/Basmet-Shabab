@@ -300,6 +300,63 @@ function LoginView() {
   );
 }
 
+function PasswordChangeView() {
+  const { user, changePassword, loading, error, clearError } = useApp();
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [formError, setFormError] = useState('');
+
+  useEffect(() => {
+    clearError();
+  }, [clearError]);
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (newPassword.length < 8) {
+      setFormError('كلمة المرور الجديدة يجب أن تكون 8 أحرف على الأقل.');
+      return;
+    }
+
+    if (newPassword !== confirmPassword) {
+      setFormError('كلمة المرور الجديدة وتأكيدها غير متطابقتين.');
+      return;
+    }
+
+    await changePassword(currentPassword, newPassword);
+  };
+
+  const message = formError || error;
+
+  return (
+    <Card title="تغيير كلمة المرور" subtitle="Mandatory security step" className="w-full">
+      <form className="space-y-4" onSubmit={submit}>
+        <Field label="كلمة المرور الحالية">
+          <Input value={currentPassword} onChange={(event) => setCurrentPassword(event.target.value)} type="password" placeholder="••••••••" />
+        </Field>
+        <Field label="كلمة المرور الجديدة">
+          <Input value={newPassword} onChange={(event) => setNewPassword(event.target.value)} type="password" placeholder="ثمانية أحرف على الأقل" />
+        </Field>
+        <Field label="تأكيد كلمة المرور الجديدة">
+          <Input value={confirmPassword} onChange={(event) => setConfirmPassword(event.target.value)} type="password" placeholder="أعد كتابة كلمة المرور الجديدة" />
+        </Field>
+
+        {message && <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{message}</div>}
+
+        <Button type="submit" className="w-full" disabled={loading}>
+          {loading ? 'جاري تغيير كلمة المرور...' : 'تغيير كلمة المرور'}
+        </Button>
+      </form>
+
+      <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
+        الحساب الحالي {user?.fullName ? `لـ ${user.fullName}` : ''} يستخدم كلمة مرور مؤقتة.
+      </div>
+    </Card>
+  );
+}
+
 function OverviewPage() {
   const { dashboard, leaderboard, activityLogs, members, tasks, myComplaints, news } = useApp();
 
@@ -1592,6 +1649,8 @@ function ProfilePage() {
   return (
     <div className="space-y-6">
       <SectionTitle eyebrow={pageTitles.profile.eyebrow} title={pageTitles.profile.title} description={pageTitles.profile.description} />
+
+      {user?.mustChangePassword && <PasswordChangeView />}
 
       <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <Card title="بيانات الحساب" subtitle="Profile">

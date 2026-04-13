@@ -30,6 +30,7 @@ export type AuthResponse = {
   committeeName: string | null;
   points: number;
   permissions: string[];
+  mustChangePassword: boolean;
   token: string;
   expiresAtUtc: string;
 };
@@ -45,6 +46,7 @@ export type MemberInfo = {
   committeeName: string | null;
   points: number;
   permissions: string[];
+  mustChangePassword: boolean;
 };
 
 export type LeaderboardEntry = {
@@ -76,6 +78,7 @@ export type DashboardMe = {
   committeeName: string | null;
   points: number;
   permissions: string[];
+  mustChangePassword: boolean;
 };
 
 export type MemberAdminItem = {

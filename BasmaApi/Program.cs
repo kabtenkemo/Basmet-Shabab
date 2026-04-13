@@ -154,6 +154,7 @@ using (var scope = app.Services.CreateScope())
         }
 
         EnsureMemberIdentityColumns(dbContext);
+        EnsureMemberSecuritySchema(dbContext);
         EnsureComplaintAuditSchema(dbContext);
         EnsureReferenceDataSchema(dbContext);
         EnsureTaskSchema(dbContext);
@@ -173,7 +174,8 @@ using (var scope = app.Services.CreateScope())
                 NationalId = "00000000000001",
                 BirthDate = new DateOnly(1980, 1, 1),
                 Role = MemberRole.President,
-                Points = 0
+                Points = 0,
+                MustChangePassword = false
             };
 
             president.PasswordHash = passwordService.HashPassword("123");
@@ -187,6 +189,7 @@ using (var scope = app.Services.CreateScope())
             president.Email = president.Email == string.Empty ? "president@basmet.local" : president.Email;
             president.NationalId = string.IsNullOrWhiteSpace(president.NationalId) ? "00000000000001" : president.NationalId;
             president.BirthDate ??= new DateOnly(1980, 1, 1);
+            president.MustChangePassword = false;
             president.PasswordHash = passwordService.HashPassword("123");
             dbContext.SaveChanges();
         }
@@ -202,6 +205,11 @@ static void EnsureMemberIdentityColumns(AppDbContext dbContext)
 {
     dbContext.Database.ExecuteSqlRaw("IF COL_LENGTH('dbo.Members', 'NationalId') IS NULL ALTER TABLE dbo.Members ADD NationalId nvarchar(14) NULL;");
     dbContext.Database.ExecuteSqlRaw("IF COL_LENGTH('dbo.Members', 'BirthDate') IS NULL ALTER TABLE dbo.Members ADD BirthDate date NULL;");
+}
+
+static void EnsureMemberSecuritySchema(AppDbContext dbContext)
+{
+    dbContext.Database.ExecuteSqlRaw("IF COL_LENGTH('dbo.Members', 'MustChangePassword') IS NULL ALTER TABLE dbo.Members ADD MustChangePassword bit NOT NULL CONSTRAINT DF_Members_MustChangePassword DEFAULT 0;");
 }
 
 static void EnsureComplaintAuditSchema(AppDbContext dbContext)
@@ -452,6 +460,7 @@ if (!app.Environment.IsDevelopment())
 app.UseCors("ClientApp");
 
 app.UseAuthentication();
+app.UseMiddleware<PasswordChangeRequiredMiddleware>();
 app.UseMiddleware<AuditRequestContextMiddleware>();
 app.UseAuthorization();
 

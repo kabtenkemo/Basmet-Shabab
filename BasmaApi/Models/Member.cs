@@ -16,6 +16,8 @@ public sealed class Member
 
     public string PasswordHash { get; set; } = string.Empty;
 
+    public bool MustChangePassword { get; set; }
+
     public MemberRole Role { get; set; } = MemberRole.CommitteeMember;
 
     public string? GovernorName { get; set; }
