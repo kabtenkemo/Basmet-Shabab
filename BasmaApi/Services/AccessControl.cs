@@ -4,6 +4,11 @@ namespace BasmaApi.Services;
 
 public static class AccessControl
 {
+    public static bool CanViewAllMembers(Member actor)
+    {
+        return actor.Role is MemberRole.President or MemberRole.VicePresident;
+    }
+
     public const string ManageUsersPermission = "Users.Manage";
     public const string ManageRolesPermission = "Roles.Manage";
     public const string ManagePointsPermission = "Points.Manage";
@@ -28,7 +33,7 @@ public static class AccessControl
 
     public static bool CanManageMember(Member actor, Member target)
     {
-        if (actor.Role is MemberRole.President or MemberRole.VicePresident)
+        if (CanViewAllMembers(actor))
         {
             return true;
         }

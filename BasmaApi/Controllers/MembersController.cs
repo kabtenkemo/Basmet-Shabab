@@ -299,7 +299,7 @@ public sealed class MembersController : ControllerBase
 
     private static IQueryable<Member> ApplyScopeFilter(IQueryable<Member> query, Member actor)
     {
-        if (actor.Role is MemberRole.President or MemberRole.VicePresident)
+        if (AccessControl.CanViewAllMembers(actor))
         {
             return query;
         }
