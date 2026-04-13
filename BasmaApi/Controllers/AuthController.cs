@@ -34,9 +34,11 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         var email = request.Email.Trim().ToLowerInvariant();
+        
         var member = await _dbContext.Members
             .Include(candidate => candidate.PermissionGrants)
             .FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+        
         if (member is null)
         {
             return Unauthorized(new { message = "بيانات الدخول غير صحيحة." });
