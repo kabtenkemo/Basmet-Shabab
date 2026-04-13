@@ -243,6 +243,7 @@ function LoginView() {
   const { loginUser, loading, error, clearError } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [formError, setFormError] = useState('');
 
   useEffect(() => {
     clearError();
@@ -250,7 +251,15 @@ function LoginView() {
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    await loginUser(email, password);
+    setFormError('');
+
+    const trimmedEmail = email.trim();
+    if (!trimmedEmail || !password.trim()) {
+      setFormError('البريد الإلكتروني وكلمة المرور مطلوبان.');
+      return;
+    }
+
+    await loginUser(trimmedEmail, password);
   };
 
   return (
@@ -298,7 +307,7 @@ function LoginView() {
               <Input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="••••••••" />
             </Field>
 
-            {error && <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{error}</div>}
+            {(formError || error) && <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{formError || error}</div>}
 
             <Button type="submit" className="w-full" disabled={loading}>
               {loading ? 'جاري تسجيل الدخول...' : 'دخول'}
