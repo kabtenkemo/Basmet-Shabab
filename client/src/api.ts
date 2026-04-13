@@ -25,7 +25,7 @@ import type {
   TaskItem
 } from './types';
 
-const baseURL = '/api';
+const baseURL = '';
 const authTokenKey = 'team-management-token';
 
 const api = axios.create({
