@@ -186,6 +186,7 @@ using (var scope = app.Services.CreateScope())
         else
         {
             var emailChanged = !string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase);
+            var oldPasswordHash = president.PasswordHash;
             var passwordHashNotCorrect = string.IsNullOrWhiteSpace(president.PasswordHash) || !passwordService.VerifyPassword("123", president.PasswordHash);
             
             president.FullName = string.IsNullOrWhiteSpace(president.FullName) ? "رئيس الكيان" : president.FullName;
@@ -197,10 +198,15 @@ using (var scope = app.Services.CreateScope())
             dbContext.SaveChanges();
             
             startupLogger.LogInformation(
-                "✅ Updated President account: EmailChanged={EmailChanged}, PasswordFixedNeeded={PasswordFixedNeeded}, Email={Email}",
+                "✅ Updated President account: " +
+                "EmailChanged={EmailChanged}, " +
+                "PasswordFixedNeeded={PasswordFixedNeeded}, " +
+                "Email={Email}, " +
+                "OldHashNull={OldHashNull}",
                 emailChanged,
                 passwordHashNotCorrect,
-                targetPresidentEmail.ToLowerInvariant());
+                targetPresidentEmail.ToLowerInvariant(),
+                string.IsNullOrWhiteSpace(oldPasswordHash));
         }
     }
     catch (Exception ex)
