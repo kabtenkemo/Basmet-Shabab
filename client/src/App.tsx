@@ -7,6 +7,42 @@ import { useApp } from './context/AppContext';
 import { commentComplaint, createCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates } from './api';
 import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, TaskAudienceType, TaskFormState, TaskItem } from './types';
 
+/**
+ * Extract birthDate (YYYY-MM-DD) from Egyptian National ID
+ * National ID format: 14 digits, first 6 digits represent: YYMMDD
+ * Example: 91051512345678 -> 1991-05-15
+ */
+function extractBirthDateFromNationalId(nationalId: string): string | null {
+  const normalized = nationalId.replace(/\s+/g, '');
+  
+  if (normalized.length !== 14 || /[^0-9]/.test(normalized)) {
+    return null;
+  }
+  
+  const yearStr = normalized.substring(0, 2);
+  const monthStr = normalized.substring(2, 4);
+  const dayStr = normalized.substring(4, 6);
+  
+  const year = parseInt(yearStr, 10);
+  const month = parseInt(monthStr, 10);
+  const day = parseInt(dayStr, 10);
+  
+  // Egyptian IDs: 00-30 = 2000s, 31-99 = 1900s (but more modern interpretation varies)
+  // Using common pattern: 00-current year's last 2 digits = 20XX
+  const fullYear = year <= 30 ? 2000 + year : 1900 + year;
+  
+  if (month < 1 || month > 12 || day < 1 || day > 31) {
+    return null;
+  }
+  
+  const date = new Date(fullYear, month - 1, day);
+  if (date.getMonth() !== month - 1 || date.getDate() !== day) {
+    return null;
+  }
+  
+  return `${fullYear}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+}
+
 const emptyTask: TaskFormState = {
   title: '',
   description: '',
@@ -762,18 +798,44 @@ function MembersPage() {
     const nameParts = memberForm.fullName.trim().split(/\s+/).filter(Boolean);
     const normalizedNationalId = memberForm.nationalId.replace(/\s+/g, '');
 
-    if (nameParts.length < 4) {
-      setMemberFormError('الاسم رباعي مطلوب.');
+    if (!memberForm.fullName.trim()) {
+      setMemberFormError('الاسم الكامل مطلوب.');
       return;
     }
 
-    if (normalizedNationalId.length !== 14 || /[^0-9]/.test(normalizedNationalId)) {
-      setMemberFormError('الرقم القومي يجب أن يكون 14 رقمًا.');
+    if (nameParts.length < 4) {
+      setMemberFormError(`الاسم يجب أن يكون رباعياً (${nameParts.length} أجزاء فقط). الرجاء إدخال الاسم الكامل.`);
+      return;
+    }
+
+    if (!memberForm.email.trim()) {
+      setMemberFormError('البريد الإلكتروني مطلوب.');
+      return;
+    }
+
+    if (normalizedNationalId.length === 0) {
+      setMemberFormError('الرقم القومي مطلوب.');
+      return;
+    }
+
+    if (normalizedNationalId.length !== 14) {
+      setMemberFormError(`الرقم القومي يجب أن يكون 14 رقماً (أدخل الآن ${normalizedNationalId.length}).`);
+      return;
+    }
+
+    if (/[^0-9]/.test(normalizedNationalId)) {
+      setMemberFormError('الرقم القومي يجب أن يحتوي على أرقام فقط، بلا أحرف أو رموز.');
       return;
     }
 
     if (!memberForm.birthDate) {
-      setMemberFormError('تاريخ الميلاد مطلوب.');
+      const extractedFromId = extractBirthDateFromNationalId(normalizedNationalId);
+      if (!extractedFromId) {
+        setMemberFormError('تاريخ الميلاد مطلوب. لم نتمكن من استخراجه من الرقم القومي.');
+        return;
+      }
+      // Auto-fill birthDate and retry
+      setMemberForm((current) => ({ ...current, birthDate: extractedFromId }));
       return;
     }
 
@@ -915,7 +977,17 @@ function MembersPage() {
           {memberFormError && <div className="md:col-span-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{memberFormError}</div>}
           <Field label="الاسم رباعي"><Input value={memberForm.fullName} onChange={(event) => setMemberForm((current) => ({ ...current, fullName: event.target.value }))} /></Field>
           <Field label="البريد الإلكتروني"><Input value={memberForm.email} onChange={(event) => setMemberForm((current) => ({ ...current, email: event.target.value }))} type="email" /></Field>
-          <Field label="الرقم القومي"><Input value={memberForm.nationalId} onChange={(event) => setMemberForm((current) => ({ ...current, nationalId: event.target.value }))} inputMode="numeric" maxLength={14} placeholder="14 رقمًا" /></Field>
+          <Field label="الرقم القومي"><Input value={memberForm.nationalId} onChange={(event) => {
+            const newId = event.target.value;
+            setMemberForm((current) => {
+              const updated = { ...current, nationalId: newId };
+              const extractedDate = extractBirthDateFromNationalId(newId);
+              if (extractedDate) {
+                updated.birthDate = extractedDate;
+              }
+              return updated;
+            });
+          }} inputMode="numeric" maxLength={14} placeholder="14 رقمًا" /></Field>
           <Field label="تاريخ الميلاد"><Input value={memberForm.birthDate} onChange={(event) => setMemberForm((current) => ({ ...current, birthDate: event.target.value }))} type="date" /></Field>
           <Field label="الدور" className="md:col-span-2">
             <Select value={memberForm.role} onChange={(event) => setMemberForm((current) => ({ ...current, role: event.target.value as Role }))}>
