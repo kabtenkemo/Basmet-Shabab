@@ -161,8 +161,8 @@ using (var scope = app.Services.CreateScope())
         EnsureNewsSchema(dbContext);
         SeedReferenceData(dbContext);
 
-        var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President && member.Email == "president@basmet.local")
-            ?? dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
+        var targetPresidentEmail = "president@basmet.local";
+        var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
 
         if (president is null)
         {
@@ -170,7 +170,7 @@ using (var scope = app.Services.CreateScope())
             president = new Member
             {
                 FullName = "رئيس الكيان",
-                Email = "president@basmet.local",
+                Email = targetPresidentEmail,
                 NationalId = "00000000000001",
                 BirthDate = new DateOnly(1980, 1, 1),
                 Role = MemberRole.President,
@@ -181,17 +181,27 @@ using (var scope = app.Services.CreateScope())
             president.PasswordHash = passwordService.HashPassword("123");
             dbContext.Members.Add(president);
             dbContext.SaveChanges();
+            startupLogger.LogInformation("Created new President account with email {Email}", targetPresidentEmail);
         }
         else
         {
             var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
+            var emailChanged = !string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase);
+            var passwordHashChanged = !passwordService.VerifyPassword("123", president.PasswordHash);
+            
             president.FullName = string.IsNullOrWhiteSpace(president.FullName) ? "رئيس الكيان" : president.FullName;
-            president.Email = "president@basmet.local";
+            president.Email = targetPresidentEmail;
             president.NationalId = string.IsNullOrWhiteSpace(president.NationalId) ? "00000000000001" : president.NationalId;
             president.BirthDate ??= new DateOnly(1980, 1, 1);
             president.MustChangePassword = false;
             president.PasswordHash = passwordService.HashPassword("123");
             dbContext.SaveChanges();
+            
+            startupLogger.LogInformation(
+                "Updated President account: EmailChanged={EmailChanged}, PasswordChanged={PasswordChanged}, Email={Email}",
+                emailChanged,
+                passwordHashChanged,
+                targetPresidentEmail);
         }
     }
     catch (Exception ex)
