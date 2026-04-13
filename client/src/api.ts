@@ -25,7 +25,7 @@ import type {
   TaskItem
 } from './types';
 
-const baseURL = import.meta.env.VITE_API_BASE_URL ?? 'https://basmet-shabab.runasp.net';
+const baseURL = import.meta.env.VITE_API_BASE_URL ?? '/api';
 const authTokenKey = 'team-management-token';
 
 const api = axios.create({
