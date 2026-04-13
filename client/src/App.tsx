@@ -849,11 +849,15 @@ function MembersPage() {
       return;
     }
 
-    await createMember(memberForm);
-    setCreateOpen(false);
-    setMemberForm(emptyMember);
-    setCommittees([]);
-    setMemberFormError('');
+    try {
+      await createMember(memberForm);
+      setCreateOpen(false);
+      setMemberForm(emptyMember);
+      setCommittees([]);
+      setMemberFormError('');
+    } catch (error) {
+      setMemberFormError(error instanceof Error ? error.message : 'فشل إنشاء العضو. تحقق من البيانات وحاول مرة أخرى.');
+    }
   };
 
   const saveRole = async () => {
@@ -975,9 +979,9 @@ function MembersPage() {
       >
         <form id="member-create-form" className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void saveMember(event)}>
           {memberFormError && <div className="md:col-span-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{memberFormError}</div>}
-          <Field label="الاسم رباعي"><Input value={memberForm.fullName} onChange={(event) => setMemberForm((current) => ({ ...current, fullName: event.target.value }))} /></Field>
-          <Field label="البريد الإلكتروني"><Input value={memberForm.email} onChange={(event) => setMemberForm((current) => ({ ...current, email: event.target.value }))} type="email" /></Field>
-          <Field label="الرقم القومي"><Input value={memberForm.nationalId} onChange={(event) => {
+          <Field label="الاسم رباعي" hint="مثال: محمد علي محمود أحمد"><Input value={memberForm.fullName} onChange={(event) => setMemberForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="الاسم الكامل" /></Field>
+          <Field label="البريد الإلكتروني" hint="سيُستخدم لتسجيل الدخول"><Input value={memberForm.email} onChange={(event) => setMemberForm((current) => ({ ...current, email: event.target.value }))} type="email" placeholder="example@domain.com" /></Field>
+          <Field label="الرقم القومي" hint="يُستخرج منه تاريخ الميلاد تلقائياً"><Input value={memberForm.nationalId} onChange={(event) => {
             const newId = event.target.value;
             setMemberForm((current) => {
               const updated = { ...current, nationalId: newId };
@@ -988,7 +992,7 @@ function MembersPage() {
               return updated;
             });
           }} inputMode="numeric" maxLength={14} placeholder="14 رقمًا" /></Field>
-          <Field label="تاريخ الميلاد"><Input value={memberForm.birthDate} onChange={(event) => setMemberForm((current) => ({ ...current, birthDate: event.target.value }))} type="date" /></Field>
+          <Field label="تاريخ الميلاد" hint={memberForm.birthDate ? `تُم استخراجه من الرقم القومي: ${memberForm.birthDate.replace(/-/g, '/')}` : 'يملأ تلقائياً من الرقم القومي'}><Input value={memberForm.birthDate} onChange={(event) => setMemberForm((current) => ({ ...current, birthDate: event.target.value }))} type="date" disabled={memberForm.nationalId.length === 14} /></Field>
           <Field label="الدور" className="md:col-span-2">
             <Select value={memberForm.role} onChange={(event) => setMemberForm((current) => ({ ...current, role: event.target.value as Role }))}>
               {Object.keys(roleLabels).map((role) => <option key={role} value={role}>{roleLabel(role)}</option>)}
