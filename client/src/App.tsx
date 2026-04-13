@@ -561,6 +561,7 @@ function MembersPage() {
   const [governorates, setGovernorates] = useState<GovernorateOption[]>([]);
   const [committees, setCommittees] = useState<CommitteeOption[]>([]);
   const [scopeLoading, setScopeLoading] = useState(false);
+  const [memberFormError, setMemberFormError] = useState('');
   const visibleGovernorates = useMemo(() => {
     if (user?.role === 'GovernorCoordinator' && user.governorName) {
       return governorates.filter((governorate) => governorate.name === user.governorName);
@@ -673,10 +674,41 @@ function MembersPage() {
 
   const saveMember = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    setMemberFormError('');
+
+    const nameParts = memberForm.fullName.trim().split(/\s+/).filter(Boolean);
+    const normalizedNationalId = memberForm.nationalId.replace(/\s+/g, '');
+
+    if (nameParts.length < 4) {
+      setMemberFormError('الاسم رباعي مطلوب.');
+      return;
+    }
+
+    if (normalizedNationalId.length !== 14 || /[^0-9]/.test(normalizedNationalId)) {
+      setMemberFormError('الرقم القومي يجب أن يكون 14 رقمًا.');
+      return;
+    }
+
+    if (!memberForm.birthDate) {
+      setMemberFormError('تاريخ الميلاد مطلوب.');
+      return;
+    }
+
+    if (roleNeedsGovernorate(memberForm.role) && !memberForm.governorateId) {
+      setMemberFormError('المحافظة مطلوبة لهذا الدور.');
+      return;
+    }
+
+    if (roleNeedsCommittee(memberForm.role) && !memberForm.committeeId) {
+      setMemberFormError('اللجنة مطلوبة لهذا الدور.');
+      return;
+    }
+
     await createMember(memberForm);
     setCreateOpen(false);
     setMemberForm(emptyMember);
     setCommittees([]);
+    setMemberFormError('');
   };
 
   const saveRole = async () => {
@@ -791,12 +823,13 @@ function MembersPage() {
 
       <Modal
         open={createOpen}
-        onClose={() => setCreateOpen(false)}
+        onClose={() => { setCreateOpen(false); setMemberFormError(''); }}
         title="إنشاء حساب داخلي"
         subtitle="Default password: 123"
-        footer={<><Button variant="ghost" onClick={() => setCreateOpen(false)}><span className="inline-flex items-center gap-2"><FiArrowLeft /> إلغاء</span></Button><Button type="submit" form="member-create-form"><span className="inline-flex items-center gap-2"><FiSave /> إنشاء</span></Button></>}
+        footer={<><Button variant="ghost" onClick={() => { setCreateOpen(false); setMemberFormError(''); }}><span className="inline-flex items-center gap-2"><FiArrowLeft /> إلغاء</span></Button><Button type="submit" form="member-create-form"><span className="inline-flex items-center gap-2"><FiSave /> إنشاء</span></Button></>}
       >
         <form id="member-create-form" className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void saveMember(event)}>
+          {memberFormError && <div className="md:col-span-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{memberFormError}</div>}
           <Field label="الاسم رباعي"><Input value={memberForm.fullName} onChange={(event) => setMemberForm((current) => ({ ...current, fullName: event.target.value }))} /></Field>
           <Field label="البريد الإلكتروني"><Input value={memberForm.email} onChange={(event) => setMemberForm((current) => ({ ...current, email: event.target.value }))} type="email" /></Field>
           <Field label="الرقم القومي"><Input value={memberForm.nationalId} onChange={(event) => setMemberForm((current) => ({ ...current, nationalId: event.target.value }))} inputMode="numeric" maxLength={14} placeholder="14 رقمًا" /></Field>
