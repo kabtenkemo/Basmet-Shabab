@@ -16,7 +16,7 @@ const icons: Record<string, ReactNode> = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, navigation, section, setSection, theme, toggleTheme, logout, search, setSearch } = useApp();
+  const { user, navigation, section, setSection, theme, toggleTheme, logout, search, setSearch, error, clearError } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isLight = theme === 'light';
 
@@ -106,6 +106,17 @@ export function AppShell({ children }: { children: ReactNode }) {
             </button>
           </div>
         </header>
+
+        {error && (
+          <div className="border-b border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100 sm:px-6 lg:px-8">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p>{error}</p>
+              <button type="button" className="rounded-full border border-rose-300/20 px-3 py-1 text-xs font-bold text-rose-50 transition hover:bg-rose-400/10" onClick={clearError}>
+                إغلاق
+              </button>
+            </div>
+          </div>
+        )}
 
         <main className="min-w-0 flex-1 px-4 py-6 sm:px-6 lg:px-8">
           {children}
