@@ -163,34 +163,33 @@ using (var scope = app.Services.CreateScope())
 
         var targetPresidentEmail = "president@basmet.local";
         var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
+        var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
 
         if (president is null)
         {
-            var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
             president = new Member
             {
                 FullName = "رئيس الكيان",
-                Email = targetPresidentEmail,
+                Email = targetPresidentEmail.ToLowerInvariant(),
                 NationalId = "00000000000001",
                 BirthDate = new DateOnly(1980, 1, 1),
                 Role = MemberRole.President,
                 Points = 0,
-                MustChangePassword = false
+                MustChangePassword = false,
+                PasswordHash = passwordService.HashPassword("123")
             };
 
-            president.PasswordHash = passwordService.HashPassword("123");
             dbContext.Members.Add(president);
             dbContext.SaveChanges();
-            startupLogger.LogInformation("Created new President account with email {Email}", targetPresidentEmail);
+            startupLogger.LogInformation("✅ Created new President account with email {Email}", targetPresidentEmail.ToLowerInvariant());
         }
         else
         {
-            var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
             var emailChanged = !string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase);
-            var passwordHashChanged = !passwordService.VerifyPassword("123", president.PasswordHash);
+            var passwordHashNotCorrect = string.IsNullOrWhiteSpace(president.PasswordHash) || !passwordService.VerifyPassword("123", president.PasswordHash);
             
             president.FullName = string.IsNullOrWhiteSpace(president.FullName) ? "رئيس الكيان" : president.FullName;
-            president.Email = targetPresidentEmail;
+            president.Email = targetPresidentEmail.ToLowerInvariant();
             president.NationalId = string.IsNullOrWhiteSpace(president.NationalId) ? "00000000000001" : president.NationalId;
             president.BirthDate ??= new DateOnly(1980, 1, 1);
             president.MustChangePassword = false;
@@ -198,10 +197,10 @@ using (var scope = app.Services.CreateScope())
             dbContext.SaveChanges();
             
             startupLogger.LogInformation(
-                "Updated President account: EmailChanged={EmailChanged}, PasswordChanged={PasswordChanged}, Email={Email}",
+                "✅ Updated President account: EmailChanged={EmailChanged}, PasswordFixedNeeded={PasswordFixedNeeded}, Email={Email}",
                 emailChanged,
-                passwordHashChanged,
-                targetPresidentEmail);
+                passwordHashNotCorrect,
+                targetPresidentEmail.ToLowerInvariant());
         }
     }
     catch (Exception ex)

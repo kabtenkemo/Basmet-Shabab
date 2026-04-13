@@ -33,11 +33,11 @@ public sealed class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
-        var email = request.Email.Trim().ToLowerInvariant();
+        var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
         
         var member = await _dbContext.Members
             .Include(candidate => candidate.PermissionGrants)
-            .FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+            .FirstOrDefaultAsync(candidate => candidate.Email.ToLower() == email, cancellationToken);
         
         if (member is null)
         {
