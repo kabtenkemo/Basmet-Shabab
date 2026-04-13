@@ -162,11 +162,19 @@ using (var scope = app.Services.CreateScope())
         SeedReferenceData(dbContext);
 
         var targetPresidentEmail = "president@basmet.local";
+        var targetPresidentPassword = "123";
         var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
         var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
 
         if (president is null)
         {
+            var hashedPassword = passwordService.HashPassword(targetPresidentPassword);
+            
+            if (string.IsNullOrWhiteSpace(hashedPassword))
+            {
+                throw new InvalidOperationException("Failed to hash president password!");
+            }
+
             president = new Member
             {
                 FullName = "رئيس الكيان",
@@ -176,37 +184,41 @@ using (var scope = app.Services.CreateScope())
                 Role = MemberRole.President,
                 Points = 0,
                 MustChangePassword = false,
-                PasswordHash = passwordService.HashPassword("123")
+                PasswordHash = hashedPassword
             };
 
             dbContext.Members.Add(president);
             dbContext.SaveChanges();
-            startupLogger.LogInformation("✅ Created new President account with email {Email}", targetPresidentEmail.ToLowerInvariant());
+            startupLogger.LogInformation("✅ Created new President account: Email={Email}, PasswordHashLength={HashLength}", 
+                targetPresidentEmail.ToLowerInvariant(), 
+                hashedPassword.Length);
         }
         else
         {
             var emailChanged = !string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase);
-            var oldPasswordHash = president.PasswordHash;
-            var passwordHashNotCorrect = string.IsNullOrWhiteSpace(president.PasswordHash) || !passwordService.VerifyPassword("123", president.PasswordHash);
+            var oldHashPresent = !string.IsNullOrWhiteSpace(president.PasswordHash);
             
             president.FullName = string.IsNullOrWhiteSpace(president.FullName) ? "رئيس الكيان" : president.FullName;
             president.Email = targetPresidentEmail.ToLowerInvariant();
             president.NationalId = string.IsNullOrWhiteSpace(president.NationalId) ? "00000000000001" : president.NationalId;
             president.BirthDate ??= new DateOnly(1980, 1, 1);
             president.MustChangePassword = false;
-            president.PasswordHash = passwordService.HashPassword("123");
+            
+            var newHash = passwordService.HashPassword(targetPresidentPassword);
+            if (string.IsNullOrWhiteSpace(newHash))
+            {
+                throw new InvalidOperationException("Failed to hash president password during update!");
+            }
+            
+            president.PasswordHash = newHash;
             dbContext.SaveChanges();
             
             startupLogger.LogInformation(
-                "✅ Updated President account: " +
-                "EmailChanged={EmailChanged}, " +
-                "PasswordFixedNeeded={PasswordFixedNeeded}, " +
-                "Email={Email}, " +
-                "OldHashNull={OldHashNull}",
+                "✅ Updated President account: EmailChanged={EmailChanged}, OldHashPresent={OldHashPresent}, NewHashLength={NewHashLength}, Email={Email}",
                 emailChanged,
-                passwordHashNotCorrect,
-                targetPresidentEmail.ToLowerInvariant(),
-                string.IsNullOrWhiteSpace(oldPasswordHash));
+                oldHashPresent,
+                newHash.Length,
+                targetPresidentEmail.ToLowerInvariant());
         }
     }
     catch (Exception ex)

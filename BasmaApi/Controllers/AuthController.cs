@@ -44,9 +44,29 @@ public sealed class AuthController : ControllerBase
             return Unauthorized(new { message = "بيانات الدخول غير صحيحة." });
         }
 
-        if (!_passwordService.VerifyPassword(request.Password, member.PasswordHash))
+        // Validate that password hash exists
+        if (string.IsNullOrWhiteSpace(member.PasswordHash))
         {
-            return Unauthorized(new { message = "بيانات الدخول غير صحيحة." });
+            return Unauthorized(new { message = "بيانات الدخول غير صحيحة. حساب بدون كلمة سر." });
+        }
+
+        // Validate password is provided
+        if (string.IsNullOrWhiteSpace(request.Password))
+        {
+            return Unauthorized(new { message = "كلمة المرور مطلوبة." });
+        }
+
+        try
+        {
+            var passwordVerified = _passwordService.VerifyPassword(request.Password, member.PasswordHash);
+            if (!passwordVerified)
+            {
+                return Unauthorized(new { message = "بيانات الدخول غير صحيحة." });
+            }
+        }
+        catch (Exception ex)
+        {
+            return Unauthorized(new { message = "خطأ في التحقق من كلمة المرور.", error = ex.Message });
         }
 
         var (token, expiresAtUtc) = _tokenService.CreateToken(member);
