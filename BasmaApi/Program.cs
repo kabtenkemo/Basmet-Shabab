@@ -65,7 +65,21 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ClientApp", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
+        policy
+            .SetIsOriginAllowed(origin =>
+            {
+                if (string.Equals(origin, "http://localhost:5173", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                if (origin.EndsWith(".netlify.app", StringComparison.OrdinalIgnoreCase))
+                {
+                    return true;
+                }
+
+                return false;
+            })
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
