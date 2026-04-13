@@ -3,6 +3,7 @@ using BasmaApi.Data;
 using BasmaApi.Middleware;
 using BasmaApi.Models;
 using BasmaApi.Services;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -66,20 +67,9 @@ builder.Services.AddCors(options =>
     options.AddPolicy("ClientApp", policy =>
     {
         policy
-            .SetIsOriginAllowed(origin =>
-            {
-                if (string.Equals(origin, "http://localhost:5173", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                if (origin.EndsWith(".netlify.app", StringComparison.OrdinalIgnoreCase))
-                {
-                    return true;
-                }
-
-                return false;
-            })
+            .WithOrigins(
+                "http://localhost:5173",
+                "https://basmet-shabab.netlify.app")
             .AllowAnyHeader()
             .AllowAnyMethod();
     });
@@ -87,6 +77,13 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<IPasswordService, BcryptPasswordService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.KnownIPNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is missing.");
 var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is missing.");
@@ -445,7 +442,12 @@ static void SeedReferenceData(AppDbContext dbContext)
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseHttpsRedirection();
+app.UseForwardedHeaders();
+
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseCors("ClientApp");
 
