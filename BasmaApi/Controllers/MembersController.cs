@@ -71,45 +71,68 @@ public sealed class MembersController : ControllerBase
             return Unauthorized();
         }
 
+        // Validate role
         if (!Enum.TryParse<MemberRole>(request.Role, ignoreCase: true, out var targetRole))
         {
             return BadRequest(new { message = "الدور غير صالح." });
         }
 
+        // Validate name: must have at least 4 parts
         if (!HasAtLeastFourNameParts(request.FullName))
         {
-            return BadRequest(new { message = "الاسم رباعي مطلوب." });
+            var parts = request.FullName.Trim().Split(new[] { ' ' }, StringSplitOptions.RemoveEmptyEntries).Length;
+            return BadRequest(new { message = $"الاسم رباعي مطلوب (أدخل الآن {parts} أجزاء فقط)." });
         }
 
+        // Validate national ID format
         var nationalId = NormalizeNationalId(request.NationalId);
         if (nationalId.Length != 14 || nationalId.Any(character => character < '0' || character > '9'))
         {
-            return BadRequest(new { message = "الرقم القومي يجب أن يكون 14 رقمًا." });
+            return BadRequest(new { message = "الرقم القومي يجب أن يكون 14 رقمًا بلا فراغات أو أحرف." });
         }
 
+        // Validate birth date
         if (request.BirthDate is null)
         {
             return BadRequest(new { message = "تاريخ الميلاد مطلوب." });
         }
 
+        // Validate permission to create this role
         if (!AccessControl.CanCreateMember(currentMember, targetRole))
         {
             return Forbid();
         }
 
+        // Validate email format and uniqueness
         var email = request.Email.Trim().ToLowerInvariant();
-        var exists = await _dbContext.Members.AnyAsync(member => member.Email == email, cancellationToken);
-        if (exists)
+        if (string.IsNullOrWhiteSpace(email))
         {
-            return Conflict(new { message = "هذا البريد مستخدم بالفعل." });
+            return BadRequest(new { message = "البريد الإلكتروني مطلوب." });
         }
 
+        try
+        {
+            var emailAddress = new System.Net.Mail.MailAddress(email);
+        }
+        catch
+        {
+            return BadRequest(new { message = "البريد الإلكتروني غير صحيح." });
+        }
+
+        var emailExists = await _dbContext.Members.AnyAsync(member => member.Email.ToLower() == email, cancellationToken);
+        if (emailExists)
+        {
+            return Conflict(new { message = "هذا البريد مستخدم بالفعل. جرب بريد آخر." });
+        }
+
+        // Validate national ID uniqueness
         var nationalIdExists = await _dbContext.Members.AnyAsync(member => member.NationalId == nationalId, cancellationToken);
         if (nationalIdExists)
         {
             return Conflict(new { message = "الرقم القومي مستخدم بالفعل." });
         }
 
+        // Resolve governorate and committee for user's role
         var scopeResult = await ResolveScopeAsync(targetRole, request.GovernorateId, request.CommitteeId, cancellationToken);
         if (scopeResult.ErrorMessage is not null)
         {
