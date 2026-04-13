@@ -96,8 +96,6 @@ const roleLabels: Record<Role, string> = {
 };
 
 const leaderboardRoles: Role[] = [
-  'President',
-  'VicePresident',
   'CentralMember',
   'GovernorCoordinator',
   'GovernorCommitteeCoordinator',
