@@ -186,7 +186,7 @@ using (var scope = app.Services.CreateScope())
         {
             var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
             president.FullName = string.IsNullOrWhiteSpace(president.FullName) ? "رئيس الكيان" : president.FullName;
-            president.Email = president.Email == string.Empty ? "president@basmet.local" : president.Email;
+            president.Email = "president@basmet.local";
             president.NationalId = string.IsNullOrWhiteSpace(president.NationalId) ? "00000000000001" : president.NationalId;
             president.BirthDate ??= new DateOnly(1980, 1, 1);
             president.MustChangePassword = false;
