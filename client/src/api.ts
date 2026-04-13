@@ -90,7 +90,10 @@ export function getStoredToken() {
 }
 
 export async function login(email: string, password: string) {
-  return unwrap(api.post<AuthResponse>('/api/auth/login', { email, password }));
+  console.log('🔐 Login Request:', { email: email.trim(), password: password.trim() });
+  const response = await unwrap(api.post<AuthResponse>('/api/auth/login', { email: email.trim(), password: password.trim() }));
+  console.log('🔐 Login Success:', response);
+  return response;
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {
