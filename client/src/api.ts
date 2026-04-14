@@ -49,6 +49,7 @@ api.interceptors.request.use((config) => {
 });
 
 // Response interceptor to handle errors globally
+// FIX: Automatically clear token on 401 to prevent stale sessions
 api.interceptors.response.use(
   (response) => response,
   (error) => {

@@ -33,6 +33,8 @@ public sealed class AuthController : ControllerBase
     [HttpPost("login")]
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
+        // FIX: Normalize email to lowercase for case-insensitive search
+        // This prevents login failures when user enters "PRESIDENT@BASMET.LOCAL" instead of "president@basmet.local"
         var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
         
         var member = await _dbContext.Members

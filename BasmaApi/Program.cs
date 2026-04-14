@@ -166,6 +166,8 @@ using (var scope = app.Services.CreateScope())
         var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
         var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
 
+        // FIX: Only update President account if fields have actually changed
+        // This prevents unnecessary database writes and email rewriting on every startup
         if (president is null)
         {
             var hashedPassword = passwordService.HashPassword(targetPresidentPassword);

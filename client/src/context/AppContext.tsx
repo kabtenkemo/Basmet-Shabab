@@ -246,6 +246,8 @@ export function AppProvider({ children }: PropsWithChildren) {
         return;
       }
 
+      // FIX: Use Promise.allSettled to handle partial failures gracefully
+      // If one API call fails, others still complete instead of failing everything
       const [dashboardResult, tasksResult, complaintsResult, newsResult] = await Promise.allSettled([
         getDashboard().catch(err => {
           console.warn('Failed to load dashboard:', err);
