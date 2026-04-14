@@ -6,6 +6,7 @@ using BasmaApi.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
@@ -62,6 +63,7 @@ builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IComplaintEscalationService, ComplaintEscalationService>();
 builder.Services.AddHostedService<ComplaintEscalationWorker>();
 
+// FIX: CORS hardened - limit to specific methods and headers
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("ClientApp", policy =>
@@ -70,39 +72,87 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                 "http://localhost:5173",
                 "https://basmet-shabab.netlify.app")
-            .AllowAnyHeader()
-            .AllowAnyMethod();
+            .WithMethods("GET", "POST", "PUT", "DELETE")
+            .WithHeaders("Content-Type", "Authorization")
+            .AllowCredentials();
     });
 });
 
 builder.Services.AddScoped<IPasswordService, BcryptPasswordService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
 
-builder.Services.Configure<ForwardedHeadersOptions>(options =>
+// FIX: Add Rate Limiting for login and auth endpoints
+builder.Services.AddRateLimiter(options =>
+{
+    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
+    {
+        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        
+        // Strict limits for authentication endpoints
+        if (context.Request.Path.StartsWithSegments("/api/auth"))
+        {
+            return RateLimitPartition.GetFixedWindowLimiter(
+                partitionKey: remoteIp,
+                factory: _ => new FixedWindowRateLimiterOptions
+                {
+                    PermitLimit = 5,
+                    Window = TimeSpan.FromMinutes(15),
+                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+                });
+        }
+
+        // Standard limits for other endpoints
+        return RateLimitPartition.GetFixedWindowLimiter(
+            partitionKey: remoteIp,
+            factory: _ => new FixedWindowRateLimiterOptions
+            {
+                PermitLimit = 100,
+                Window = TimeSpan.FromMinutes(1),
+                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
+            });
+    });
+    
+    options.OnRejected = async (context, cancellationToken) =>
+    {
+        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
+        context.HttpContext.Response.ContentType = "application/json";
+        await context.HttpContext.Response.WriteAsJsonAsync(new
+        {
+            message = "تم تجاوز حد الطلبات. يرجى المحاولة لاحقاً.",
+            retryAfter = context.RetryAfter.TotalSeconds
+        }, cancellationToken);
+    };
+});
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
-// JWT configuration - use defaults if not configured to allow app to start for diagnostics
-var jwtKey = builder.Configuration["Jwt:Key"] 
-    ?? "default-insecure-key-1234567890123456789012345678901234567890";
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "basmet-shabab-default";
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "basmet-shabab-client-default";
+// JWT configuration - MUST be configured in production
+var jwtKey = builder.Configuration["Jwt:Key"];
+var jwtIssuer = builder.Configuration["Jwt:Issuer"];
+var jwtAudience = builder.Configuration["Jwt:Audience"];
 
-// Log if using default values
-if (string.Equals(jwtKey, "default-insecure-key-1234567890123456789012345678901234567890"))
+// FIX: Require JWT configuration in production
+if (app.Environment.IsProduction())
 {
-    Console.WriteLine("⚠️  WARNING: JWT Key not configured! Using insecure default. Set Jwt:Key in environment variables.");
+    if (string.IsNullOrEmpty(jwtKey))
+        throw new InvalidOperationException("CRITICAL: Jwt:Key must be configured in production. Set environment variable Jwt__Key");
+    if (string.IsNullOrEmpty(jwtIssuer))
+        throw new InvalidOperationException("CRITICAL: Jwt:Issuer must be configured in production.");
+    if (string.IsNullOrEmpty(jwtAudience))
+        throw new InvalidOperationException("CRITICAL: Jwt:Audience must be configured in production.");
 }
-if (string.Equals(jwtIssuer, "basmet-shabab-default"))
+
+// Use secure defaults for development
+jwtKey ??= "dev-key-1234567890123456789012345678901234567890";
+jwtIssuer ??= "basmet-shabab-dev";
+jwtAudience ??= "basmet-shabab-client-dev";
+
+if (!app.Environment.IsProduction())
 {
-    Console.WriteLine("⚠️  WARNING: JWT Issuer not configured! Using default. Set Jwt:Issuer in environment variables.");
-}
-if (string.Equals(jwtAudience, "basmet-shabab-client-default"))
-{
-    Console.WriteLine("⚠️  WARNING: JWT Audience not configured! Using default. Set Jwt:Audience in environment variables.");
+    Console.WriteLine("⚠️  Running in Development mode with default JWT keys. Configure for production.");
 }
 
 builder.Services
@@ -644,6 +694,8 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseCors("ClientApp");
+
+app.UseRateLimiter();
 
 app.UseAuthentication();
 app.UseMiddleware<PasswordChangeRequiredMiddleware>();

@@ -119,9 +119,8 @@ export function getStoredToken() {
 }
 
 export async function login(email: string, password: string) {
-  console.log('🔐 Login Request:', { email: email.trim(), password: password.trim() });
+  // Never log passwords or sensitive data in production
   const response = await unwrap(api.post<AuthResponse>('/api/auth/login', { email: email.trim(), password: password.trim() }));
-  console.log('🔐 Login Success:', response);
   return response;
 }
 

@@ -6,12 +6,14 @@ namespace BasmaApi.Middleware;
 
 public sealed class PasswordChangeRequiredMiddleware
 {
+    // Only allow endpoints that don't require changed password
+    // FIX: Removed /api/members to prevent circumventing password change requirement
     private static readonly string[] AllowedPaths =
     [
         "/api/members/me",
         "/api/auth/change-password",
-        "/api/members",
-        "/api/governorates"
+        "/api/governorates",
+        "/api/auth/logout"
     ];
 
     private readonly RequestDelegate _next;

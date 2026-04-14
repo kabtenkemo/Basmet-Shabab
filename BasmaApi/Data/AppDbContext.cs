@@ -76,6 +76,9 @@ public sealed class AppDbContext : DbContext
         modelBuilder.Entity<Member>(entity =>
         {
             entity.HasIndex(member => member.Email).IsUnique();
+            // FIX: Add indices for common queries
+            entity.HasIndex(member => member.Role);
+            entity.HasIndex(member => member.CreatedAtUtc);
             entity.Property(member => member.NationalId).HasMaxLength(14);
             entity.Property(member => member.BirthDate).HasColumnType("date");
             entity.Property(member => member.FullName).HasMaxLength(150);
@@ -161,6 +164,11 @@ public sealed class AppDbContext : DbContext
 
         modelBuilder.Entity<Complaint>(entity =>
         {
+            // FIX: Add indices for common queries
+            entity.HasIndex(complaint => complaint.MemberId);
+            entity.HasIndex(complaint => complaint.Status);
+            entity.HasIndex(complaint => complaint.Priority);
+            entity.HasIndex(complaint => complaint.CreatedAtUtc).IsDescending();
             entity.Property(complaint => complaint.Subject).HasMaxLength(200);
             entity.Property(complaint => complaint.Message).HasMaxLength(4000);
             entity.Property(complaint => complaint.AdminReply).HasMaxLength(4000);
