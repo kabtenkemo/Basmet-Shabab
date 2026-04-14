@@ -1662,6 +1662,7 @@ function SuggestionsPage() {
   const saveSuggestion = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!form.title.trim() || !form.description.trim()) {
+      window.alert('يرجى إدخال عنوان ووصف المقترح.');
       return;
     }
 
@@ -1674,8 +1675,9 @@ function SuggestionsPage() {
       if (addActivity) {
         addActivity('تقديم مقترح', `تم تقديم مقترح: ${form.title}`, 'success');
       }
-    } catch {
-      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'تعذر تقديم المقترح. حاول مرة أخرى.';
+      window.alert(message);
     }
   };
 
@@ -1816,18 +1818,6 @@ function SuggestionsPage() {
         onClose={() => setCreateOpen(false)}
         title="تقديم مقتراح جديد"
         subtitle="Suggestion form"
-        footer={
-          <>
-            <Button variant="ghost" onClick={() => setCreateOpen(false)}>
-              إلغاء
-            </Button>
-            <Button type="submit" form="suggestion-form">
-              <span className="inline-flex items-center gap-2">
-                <FiSave /> تقديم
-              </span>
-            </Button>
-          </>
-        }
       >
         <form
           id="suggestion-form"
@@ -1858,6 +1848,16 @@ function SuggestionsPage() {
               required
             />
           </Field>
+          <div className="mt-6 flex flex-wrap items-center justify-end gap-3">
+            <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+              إلغاء
+            </Button>
+            <Button type="submit">
+              <span className="inline-flex items-center gap-2">
+                <FiSave /> تقديم
+              </span>
+            </Button>
+          </div>
         </form>
       </Modal>
     </div>
