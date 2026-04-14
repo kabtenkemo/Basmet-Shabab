@@ -85,9 +85,25 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     options.KnownProxies.Clear();
 });
 
-var jwtKey = builder.Configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is missing.");
-var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is missing.");
-var jwtAudience = builder.Configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience is missing.");
+// JWT configuration - use defaults if not configured to allow app to start for diagnostics
+var jwtKey = builder.Configuration["Jwt:Key"] 
+    ?? "default-insecure-key-1234567890123456789012345678901234567890";
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "basmet-shabab-default";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "basmet-shabab-client-default";
+
+// Log if using default values
+if (string.Equals(jwtKey, "default-insecure-key-1234567890123456789012345678901234567890"))
+{
+    Console.WriteLine("⚠️  WARNING: JWT Key not configured! Using insecure default. Set Jwt:Key in environment variables.");
+}
+if (string.Equals(jwtIssuer, "basmet-shabab-default"))
+{
+    Console.WriteLine("⚠️  WARNING: JWT Issuer not configured! Using default. Set Jwt:Issuer in environment variables.");
+}
+if (string.Equals(jwtAudience, "basmet-shabab-client-default"))
+{
+    Console.WriteLine("⚠️  WARNING: JWT Audience not configured! Using default. Set Jwt:Audience in environment variables.");
+}
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -134,6 +150,8 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
+        startupLogger.LogInformation("🚀 Starting database initialization...");
+        
         if (app.Environment.IsProduction())
         {
             var currentConnection = dbContext.Database.GetConnectionString() ?? string.Empty;
@@ -143,14 +161,24 @@ using (var scope = app.Services.CreateScope())
             }
         }
 
-        var applyEfMigrations = app.Configuration.GetValue<bool>("Startup:ApplyEfMigrations");
-        if (app.Environment.IsDevelopment() || applyEfMigrations)
+        try
         {
-            dbContext.Database.Migrate();
+            var applyEfMigrations = app.Configuration.GetValue<bool>("Startup:ApplyEfMigrations");
+            if (app.Environment.IsDevelopment() || applyEfMigrations)
+            {
+                startupLogger.LogInformation("📊 Applying EF Core migrations...");
+                dbContext.Database.Migrate();
+                startupLogger.LogInformation("✅ Migrations applied successfully");
+            }
+            else
+            {
+                startupLogger.LogWarning("⏭️  Skipping EF Core migrations on startup in Production. Set Startup:ApplyEfMigrations=true to force migration execution.");
+            }
         }
-        else
+        catch (Exception migrationEx)
         {
-            startupLogger.LogWarning("Skipping EF Core migrations on startup in Production. Set Startup:ApplyEfMigrations=true to force migration execution.");
+            startupLogger.LogError(migrationEx, "❌ Migration failed. App will continue without DB schema updates.");
+            // Don't throw - let app start anyway for diagnostics
         }
 
         try
@@ -223,107 +251,117 @@ using (var scope = app.Services.CreateScope())
             startupLogger.LogWarning(ex, "⚠️ Failed to seed reference data (may already exist)");
         }
 
-        var targetPresidentEmail = "president@basmet.local";
-        var targetPresidentPassword = "123";
-        var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
-        var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
-
-        // FIX: Only update President account if fields have actually changed
-        // This prevents unnecessary database writes and email rewriting on every startup
-        if (president is null)
+        // Initialize President account (safe version)
+        try
         {
-            var hashedPassword = passwordService.HashPassword(targetPresidentPassword);
-            
-            if (string.IsNullOrWhiteSpace(hashedPassword))
-            {
-                throw new InvalidOperationException("Failed to hash president password!");
-            }
+            var targetPresidentEmail = "president@basmet.local";
+            var targetPresidentPassword = "123";
+            var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
+            var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
 
-            president = new Member
+            // FIX: Only update President account if fields have actually changed
+            // This prevents unnecessary database writes and email rewriting on every startup
+            if (president is null)
             {
-                FullName = "رئيس الكيان",
-                Email = targetPresidentEmail.ToLowerInvariant(),
-                NationalId = "00000000000001",
-                BirthDate = new DateOnly(1980, 1, 1),
-                Role = MemberRole.President,
-                Points = 0,
-                MustChangePassword = false,
-                PasswordHash = hashedPassword
-            };
-
-            dbContext.Members.Add(president);
-            dbContext.SaveChanges();
-            startupLogger.LogInformation("✅ Created new President account: Email={Email}, PasswordHashLength={HashLength}", 
-                targetPresidentEmail.ToLowerInvariant(), 
-                hashedPassword.Length);
-        }
-        else
-        {
-            // Only update if needed
-            bool needsUpdate = false;
-
-            // Check if email needs updating
-            if (!string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase))
-            {
-                president.Email = targetPresidentEmail.ToLowerInvariant();
-                needsUpdate = true;
-                startupLogger.LogInformation("🔄 President email updated: {OldEmail} → {NewEmail}", 
-                    "****", targetPresidentEmail.ToLowerInvariant());
-            }
-
-            // Only update missing fields
-            if (string.IsNullOrWhiteSpace(president.FullName))
-            {
-                president.FullName = "رئيس الكيان";
-                needsUpdate = true;
-            }
-
-            if (string.IsNullOrWhiteSpace(president.NationalId))
-            {
-                president.NationalId = "00000000000001";
-                needsUpdate = true;
-            }
-
-            if (president.BirthDate is null)
-            {
-                president.BirthDate = new DateOnly(1980, 1, 1);
-                needsUpdate = true;
-            }
-
-            // Check if password needs updating (only if hash is invalid or missing)
-            if (string.IsNullOrWhiteSpace(president.PasswordHash))
-            {
-                var newHash = passwordService.HashPassword(targetPresidentPassword);
-                if (string.IsNullOrWhiteSpace(newHash))
+                var hashedPassword = passwordService.HashPassword(targetPresidentPassword);
+                
+                if (string.IsNullOrWhiteSpace(hashedPassword))
                 {
                     throw new InvalidOperationException("Failed to hash president password!");
                 }
-                president.PasswordHash = newHash;
-                needsUpdate = true;
-                startupLogger.LogInformation("🔐 President password hash was missing, now set");
-            }
 
-            if (president.MustChangePassword != false)
-            {
-                president.MustChangePassword = false;
-                needsUpdate = true;
-            }
+                president = new Member
+                {
+                    FullName = "رئيس الكيان",
+                    Email = targetPresidentEmail.ToLowerInvariant(),
+                    NationalId = "00000000000001",
+                    BirthDate = new DateOnly(1980, 1, 1),
+                    Role = MemberRole.President,
+                    Points = 0,
+                    MustChangePassword = false,
+                    PasswordHash = hashedPassword
+                };
 
-            if (needsUpdate)
-            {
+                dbContext.Members.Add(president);
                 dbContext.SaveChanges();
-                startupLogger.LogInformation("✅ Updated President account (only changed fields)");
+                startupLogger.LogInformation("✅ Created new President account: Email={Email}, PasswordHashLength={HashLength}", 
+                    targetPresidentEmail.ToLowerInvariant(), 
+                    hashedPassword.Length);
             }
             else
             {
-                startupLogger.LogInformation("ℹ️ President account already configured correctly - skipping update");
+                // Only update if needed
+                bool needsUpdate = false;
+
+                // Check if email needs updating
+                if (!string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase))
+                {
+                    president.Email = targetPresidentEmail.ToLowerInvariant();
+                    needsUpdate = true;
+                    startupLogger.LogInformation("🔄 President email updated: {OldEmail} → {NewEmail}", 
+                        "****", targetPresidentEmail.ToLowerInvariant());
+                }
+
+                // Only update missing fields
+                if (string.IsNullOrWhiteSpace(president.FullName))
+                {
+                    president.FullName = "رئيس الكيان";
+                    needsUpdate = true;
+                }
+
+                if (string.IsNullOrWhiteSpace(president.NationalId))
+                {
+                    president.NationalId = "00000000000001";
+                    needsUpdate = true;
+                }
+
+                if (president.BirthDate is null)
+                {
+                    president.BirthDate = new DateOnly(1980, 1, 1);
+                    needsUpdate = true;
+                }
+
+                // Check if password needs updating (only if hash is invalid or missing)
+                if (string.IsNullOrWhiteSpace(president.PasswordHash))
+                {
+                    var newHash = passwordService.HashPassword(targetPresidentPassword);
+                    if (string.IsNullOrWhiteSpace(newHash))
+                    {
+                        throw new InvalidOperationException("Failed to hash president password!");
+                    }
+                    president.PasswordHash = newHash;
+                    needsUpdate = true;
+                    startupLogger.LogInformation("🔐 President password hash was missing, now set");
+                }
+
+                if (president.MustChangePassword != false)
+                {
+                    president.MustChangePassword = false;
+                    needsUpdate = true;
+                }
+
+                if (needsUpdate)
+                {
+                    dbContext.SaveChanges();
+                    startupLogger.LogInformation("✅ Updated President account (only changed fields)");
+                }
+                else
+                {
+                    startupLogger.LogInformation("ℹ️ President account already configured correctly - skipping update");
+                }
             }
+        }
+        catch (Exception presidentialEx)
+        {
+            startupLogger.LogError(presidentialEx, "❌ Failed to initialize President account. Continuing startup...");
+            // Don't throw - let app start so we can diagnose
         }
     }
     catch (Exception ex)
     {
-        startupLogger.LogCritical(ex, "Application failed during startup initialization.");
-        throw;
+        startupLogger.LogCritical(ex, "❌ Critical error during startup initialization.");
+        startupLogger.LogWarning("⚠️ Application is starting despite initialization errors. Some features may be unavailable.");
+        // Don't throw - allow app to start for diagnostics
     }
 }
 
