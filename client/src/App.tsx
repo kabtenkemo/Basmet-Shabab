@@ -1636,7 +1636,7 @@ function CommitteesPage() {
 }
 
 function SuggestionsPage() {
-  const { appendActivity } = useApp();
+  const { addActivity } = useApp();
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
@@ -1671,8 +1671,8 @@ function SuggestionsPage() {
       setCreateOpen(false);
       const result = await getSuggestions();
       setSuggestions(result);
-      if (appendActivity) {
-        appendActivity('تقديم مقترح', `تم تقديم مقترح: ${form.title}`, 'success');
+      if (addActivity) {
+        addActivity('تقديم مقترح', `تم تقديم مقترح: ${form.title}`, 'success');
       }
     } catch {
       return;
