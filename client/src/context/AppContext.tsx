@@ -110,6 +110,7 @@ const sectionLabels: Record<SectionKey, string> = {
   auditlogs: 'سجل التدقيق',
   committees: 'اللجان',
   reports: 'التقارير',
+  suggestions: 'المقترحات',
   profile: 'الملف الشخصي'
 };
 
