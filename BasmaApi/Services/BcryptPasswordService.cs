@@ -9,7 +9,8 @@ public sealed class BcryptPasswordService : IPasswordService
             throw new ArgumentException("Password cannot be null or empty.", nameof(password));
         }
 
-        return BCrypt.Net.BCrypt.HashPassword(password);
+        // BCrypt with 12 rounds (cost factor) for strong password security
+        return BCrypt.Net.BCrypt.HashPassword(password, 12);
     }
 
     public bool VerifyPassword(string password, string passwordHash)

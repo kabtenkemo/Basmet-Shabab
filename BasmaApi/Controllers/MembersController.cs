@@ -151,7 +151,7 @@ public sealed class MembersController : ControllerBase
             GovernorName = scopeResult.GovernorName,
             CommitteeName = scopeResult.CommitteeName,
             CreatedByMemberId = currentMember.Id,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("123"),
+            PasswordHash = BCrypt.Net.BCrypt.HashPassword("123", 12),  // BCrypt with 12 rounds
             MustChangePassword = true
         };
 
