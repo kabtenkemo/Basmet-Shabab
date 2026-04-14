@@ -153,13 +153,75 @@ using (var scope = app.Services.CreateScope())
             startupLogger.LogWarning("Skipping EF Core migrations on startup in Production. Set Startup:ApplyEfMigrations=true to force migration execution.");
         }
 
-        EnsureMemberIdentityColumns(dbContext);
-        EnsureMemberSecuritySchema(dbContext);
-        EnsureComplaintAuditSchema(dbContext);
-        EnsureReferenceDataSchema(dbContext);
-        EnsureTaskSchema(dbContext);
-        EnsureNewsSchema(dbContext);
-        SeedReferenceData(dbContext);
+        try
+        {
+            EnsureMemberIdentityColumns(dbContext);
+            startupLogger.LogInformation("✅ Member identity columns ensured");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "⚠️ Failed to ensure member identity columns (may already exist)");
+        }
+
+        try
+        {
+            EnsureMemberSecuritySchema(dbContext);
+            startupLogger.LogInformation("✅ Member security schema ensured");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "⚠️ Failed to ensure member security schema (may already exist)");
+        }
+
+        try
+        {
+            EnsureComplaintAuditSchema(dbContext);
+            startupLogger.LogInformation("✅ Complaint audit schema ensured");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "⚠️ Failed to ensure complaint audit schema (may already exist)");
+        }
+
+        try
+        {
+            EnsureReferenceDataSchema(dbContext);
+            startupLogger.LogInformation("✅ Reference data schema ensured");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "⚠️ Failed to ensure reference data schema (may already exist)");
+        }
+
+        try
+        {
+            EnsureTaskSchema(dbContext);
+            startupLogger.LogInformation("✅ Task schema ensured");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "⚠️ Failed to ensure task schema (may already exist)");
+        }
+
+        try
+        {
+            EnsureNewsSchema(dbContext);
+            startupLogger.LogInformation("✅ News schema ensured");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "⚠️ Failed to ensure news schema (may already exist)");
+        }
+
+        try
+        {
+            SeedReferenceData(dbContext);
+            startupLogger.LogInformation("✅ Reference data seeded");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "⚠️ Failed to seed reference data (may already exist)");
+        }
 
         var targetPresidentEmail = "president@basmet.local";
         var targetPresidentPassword = "123";
