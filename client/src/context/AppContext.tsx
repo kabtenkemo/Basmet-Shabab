@@ -107,7 +107,6 @@ const sectionLabels: Record<SectionKey, string> = {
   members: 'الأعضاء',
   tasks: 'المهام',
   complaints: 'الشكاوى',
-  suggestions: 'المقترحات',
   auditlogs: 'سجل التدقيق',
   committees: 'اللجان',
   reports: 'التقارير',
@@ -121,9 +120,9 @@ const navigationSeed: NavigationItem[] = [
   { key: 'members', label: 'الأعضاء', icon: 'users', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator'] },
   { key: 'tasks', label: 'المهام', icon: 'check', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'complaints', label: 'الشكاوى', icon: 'message', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
-  { key: 'suggestions', label: 'المقترحات', icon: 'lightbulb', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'auditlogs', label: 'سجل التدقيق', icon: 'activity', roles: ['President'] },
   { key: 'committees', label: 'اللجان', icon: 'layers', roles: ['President', 'VicePresident', 'GovernorCoordinator'] },
+  { key: 'suggestions', label: 'المقترحات', icon: 'suggestions', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'reports', label: 'التقارير', icon: 'chart', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator'] },
   { key: 'profile', label: 'الملف الشخصي', icon: 'profile', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] }
 ];

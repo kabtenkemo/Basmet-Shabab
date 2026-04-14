@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from 'react';
-import { FiActivity, FiArrowLeft, FiClock, FiDownload, FiEdit3, FiPlus, FiPrinter, FiSave, FiSend, FiThumbsDown, FiThumbsUp, FiTrash2 } from 'react-icons/fi';
+import { FiActivity, FiArrowLeft, FiClock, FiDownload, FiEdit3, FiPlus, FiPrinter, FiSave, FiSend, FiTrash2, FiThumbsUp, FiThumbsDown } from 'react-icons/fi';
 import * as XLSX from 'xlsx';
 import { AppShell } from './components/AppShell';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PagedTable, Select, SectionTitle, StatCard, Textarea, type TableColumn } from './components/ui';
 import { useApp } from './context/AppContext';
-import { commentComplaint, createCommittee, createSuggestion, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, voteSuggestion } from './api';
-import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, TaskAudienceType, TaskFormState, TaskItem } from './types';
+import { commentComplaint, createCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, createSuggestion, voteSuggestion } from './api';
+import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, SuggestionItem, SuggestionFormState, TaskAudienceType, TaskFormState, TaskItem } from './types';
 
 /**
  * Extract birthDate (YYYY-MM-DD) from Egyptian National ID
@@ -84,6 +84,11 @@ const emptyNews: NewsCreateState = {
   audienceType: 'All',
   targetRoles: [],
   targetMemberIds: []
+};
+
+const emptySuggestion: SuggestionFormState = {
+  title: '',
+  description: ''
 };
 
 const roleLabels: Record<Role, string> = {
@@ -174,6 +179,11 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string; descripti
     title: 'إدارة اللجان ونطاقات العمل',
     description: 'واجهة جاهزة لإدارة اللجان وربطها بالمحافظات وتعيين المنسقين.'
   },
+  suggestions: {
+    eyebrow: 'Suggestions',
+    title: 'نظام المقترحات والتصويت',
+    description: 'منصة لتقديم المقترحات والأفكار والتصويت عليها من قبل الأعضاء.'
+  },
   reports: {
     eyebrow: 'Reports',
     title: 'تصدير التقارير والمراجعة العامة',
@@ -183,11 +193,6 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string; descripti
     eyebrow: 'Profile',
     title: 'الملف الشخصي والإعدادات',
     description: 'معلومات العضو، الصلاحيات، النشاط الأخير، وخيارات المظهر.'
-  },
-  suggestions: {
-    eyebrow: 'Suggestions',
-    title: 'مكان للمقترحات والأفكار',
-    description: 'اقترح أفكارًا جديدة وصوّت على اقتراحات الآخرين لتطوير المؤسسة والعمل.'
   }
 };
 
@@ -1630,6 +1635,229 @@ function CommitteesPage() {
   );
 }
 
+function SuggestionsPage() {
+  const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
+  const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState<SuggestionFormState>(emptySuggestion);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadSuggestions = async () => {
+      setLoading(true);
+      try {
+        const result = await getSuggestions();
+        setSuggestions(result);
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    void loadSuggestions();
+  }, []);
+
+  const saveSuggestion = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!form.title.trim() || !form.description.trim()) {
+      return;
+    }
+
+    try {
+      await createSuggestion(form);
+      setForm(emptySuggestion);
+      setCreateOpen(false);
+      const result = await getSuggestions();
+      setSuggestions(result);
+    } catch {
+      return;
+    }
+  };
+
+  const handleVote = async (suggestionId: string, isAcceptance: boolean) => {
+    try {
+      const updated = await voteSuggestion(suggestionId, isAcceptance);
+      setSuggestions((current) =>
+        current.map((item) => (item.id === suggestionId ? updated : item))
+      );
+    } catch {
+      return;
+    }
+  };
+
+  const columns: TableColumn<SuggestionItem>[] = [
+    {
+      header: 'الاقتراح',
+      render: (row) => (
+        <div>
+          <p className="font-bold text-white">{row.title}</p>
+          <p className="text-xs text-slate-400">{row.description.slice(0, 60)}...</p>
+        </div>
+      )
+    },
+    {
+      header: 'المقدم',
+      render: (row) => (
+        <div className="text-sm">
+          <p className="text-white">{row.createdByMemberName}</p>
+          <p className="text-xs text-slate-400">{row.createdByMemberRole}</p>
+        </div>
+      )
+    },
+    {
+      header: 'الحالة',
+      render: (row) => (
+        <Badge
+          tone={
+            row.status === 'Accepted'
+              ? 'success'
+              : row.status === 'Rejected'
+              ? 'danger'
+              : 'neutral'
+          }
+        >
+          {row.status === 'Open' ? 'مفتوح' : row.status === 'Accepted' ? 'مقبول' : 'مرفوض'}
+        </Badge>
+      )
+    },
+    {
+      header: 'التصويت',
+      render: (row) => (
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-emerald-300">{row.acceptanceCount}</span>
+          <span className="text-xs text-slate-400">/</span>
+          <span className="text-xs font-bold text-rose-300">{row.rejectionCount}</span>
+        </div>
+      )
+    },
+    {
+      header: 'تصويتك',
+      render: (row) => {
+        const userVoted =
+          row.currentUserVote !== null
+            ? row.currentUserVote
+              ? 'accept'
+              : 'reject'
+            : null;
+
+        return (
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => void handleVote(row.id, true)}
+              className={`rounded-lg px-2 py-1 transition ${
+                userVoted === 'accept'
+                  ? 'bg-emerald-400/30 text-emerald-200'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              <FiThumbsUp className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => void handleVote(row.id, false)}
+              className={`rounded-lg px-2 py-1 transition ${
+                userVoted === 'reject'
+                  ? 'bg-rose-400/30 text-rose-200'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              }`}
+            >
+              <FiThumbsDown className="h-4 w-4" />
+            </button>
+          </div>
+        );
+      }
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow={pageTitles.suggestions.eyebrow}
+        title={pageTitles.suggestions.title}
+        description={pageTitles.suggestions.description}
+        actions={
+          <Button onClick={() => setCreateOpen(true)}>
+            <span className="inline-flex items-center gap-2">
+              <FiPlus /> اقتراح جديد
+            </span>
+          </Button>
+        }
+      />
+
+      <Card title="قائمة المقترحات" subtitle="Suggestions">
+        {loading ? (
+          <EmptyState title="جاري التحميل" description="يتم تحميل المقترحات..." />
+        ) : suggestions.length === 0 ? (
+          <EmptyState
+            title="لا توجد مقترحات"
+            description="ابدأ بتقديم أول مقتراح لتطوير أداء المؤسسة."
+          />
+        ) : (
+          <PagedTable
+            rows={suggestions}
+            columns={columns}
+            rowKey={(row) => row.id}
+            page={page}
+            pageSize={6}
+            onPageChange={setPage}
+            search=""
+            emptyTitle="لا توجد مقترحات"
+            emptyDescription="لا توجد مقترحات مطابقة للبحث."
+          />
+        )}
+      </Card>
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="تقديم مقتراح جديد"
+        subtitle="Suggestion form"
+        footer={
+          <>
+            <Button variant="ghost" onClick={() => setCreateOpen(false)}>
+              إلغاء
+            </Button>
+            <Button type="submit" form="suggestion-form">
+              <span className="inline-flex items-center gap-2">
+                <FiSave /> تقديم
+              </span>
+            </Button>
+          </>
+        }
+      >
+        <form
+          id="suggestion-form"
+          className="space-y-4"
+          onSubmit={(event) => void saveSuggestion(event)}
+        >
+          <Field label="عنوان الاقتراح">
+            <Input
+              value={form.title}
+              onChange={(event) =>
+                setForm((current) => ({ ...current, title: event.target.value }))
+              }
+              placeholder="ملخص الفكرة أو الاقتراح"
+            />
+          </Field>
+          <Field label="الوصف التفصيلي">
+            <Textarea
+              value={form.description}
+              onChange={(event) =>
+                setForm((current) => ({
+                  ...current,
+                  description: event.target.value
+                }))
+              }
+              rows={6}
+              placeholder="شرح مفصل للمقتراح والفوائد المتوقعة"
+            />
+          </Field>
+        </form>
+      </Modal>
+    </div>
+  );
+}
+
 function ReportsPage() {
   const { dashboard, members, tasks, complaints, activityLogs } = useApp();
 
@@ -1920,184 +2148,6 @@ function ProfilePage() {
   );
 }
 
-function SuggestionsPage() {
-  const [suggestions, setSuggestions] = useState<Array<{ suggestionId: string; title: string; description: string; createdByName: string; createdAtUtc: string; acceptCount: number; rejectCount: number; userVote: boolean | null }>>([]);
-  const [loading, setLoading] = useState(false);
-  const [createOpen, setCreateOpen] = useState(false);
-  const [page, setPage] = useState(1);
-  const [title, setTitle] = useState('');
-  const [description, setDescription] = useState('');
-  const [submitError, setSubmitError] = useState('');
-  const [voting, setVoting] = useState<string | null>(null);
-
-  useEffect(() => {
-    load();
-  }, [page]);
-
-  const load = async () => {
-    setLoading(true);
-    try {
-      const data = await getSuggestions(page, 10) as Array<{ suggestionId: string; title: string; description: string; createdByName: string; createdAtUtc: string; acceptCount: number; rejectCount: number; userVote: boolean | null }>;
-      setSuggestions(data);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateSuggestion = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setSubmitError('');
-
-    if (!title.trim() || !description.trim()) {
-      setSubmitError('العنوان والوصف مطلوبان.');
-      return;
-    }
-
-    try {
-      await createSuggestion(title, description);
-      setTitle('');
-      setDescription('');
-      setCreateOpen(false);
-      setPage(1);
-      await load();
-    } catch (error) {
-      setSubmitError(error instanceof Error ? error.message : 'فشل إنشاء الاقتراح');
-    }
-  };
-
-  const handleVote = async (suggestionId: string, isAccepted: boolean) => {
-    setVoting(suggestionId);
-    try {
-      await voteSuggestion(suggestionId, isAccepted);
-      await load();
-    } finally {
-      setVoting(null);
-    }
-  };
-
-  return (
-    <div className="space-y-6">
-      <SectionTitle
-        eyebrow={pageTitles.suggestions.eyebrow}
-        title={pageTitles.suggestions.title}
-        description={pageTitles.suggestions.description}
-        actions={
-          <Button onClick={() => setCreateOpen(true)}>
-            <span className="inline-flex items-center gap-2">
-              <FiPlus /> اقتراح جديد
-            </span>
-          </Button>
-        }
-      />
-
-      <Card title="الاقتراحات المقدمة" subtitle="Community suggestions">
-        {loading ? (
-          <div className="text-center py-12 text-slate-400">جاري التحميل...</div>
-        ) : suggestions.length === 0 ? (
-          <EmptyState
-            title="لا توجد اقتراحات بعد"
-            description="كن أول من يقدم فكرة جديدة لتطوير المؤسسة والعمل!"
-          />
-        ) : (
-          <div className="space-y-3">
-            {suggestions.map((suggestion) => (
-              <div
-                key={suggestion.suggestionId}
-                className="rounded-3xl border border-white/10 bg-white/5 p-4 hover:bg-white/[0.08] transition-colors"
-              >
-                <div className="flex flex-col gap-3 md:flex-row md:items-start md:justify-between">
-                  <div className="flex-1">
-                    <p className="text-lg font-bold text-white">{suggestion.title}</p>
-                    <p className="mt-2 text-sm leading-6 text-slate-300">{suggestion.description}</p>
-                    <div className="mt-3 flex flex-wrap gap-3 text-xs text-slate-400">
-                      <span>بواسطة: {suggestion.createdByName}</span>
-                      <span>·</span>
-                      <span>{formatDate(suggestion.createdAtUtc)}</span>
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Button
-                      variant={suggestion.userVote === true ? 'primary' : 'secondary'}
-                      disabled={voting === suggestion.suggestionId}
-                      onClick={() => handleVote(suggestion.suggestionId, true)}
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        <FiThumbsUp /> {suggestion.acceptCount}
-                      </span>
-                    </Button>
-                    <Button
-                      variant={suggestion.userVote === false ? 'danger' : 'secondary'}
-                      disabled={voting === suggestion.suggestionId}
-                      onClick={() => handleVote(suggestion.suggestionId, false)}
-                    >
-                      <span className="inline-flex items-center gap-1">
-                        <FiThumbsDown /> {suggestion.rejectCount}
-                      </span>
-                    </Button>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-
-      <Modal
-        open={createOpen}
-        onClose={() => {
-          setCreateOpen(false);
-          setSubmitError('');
-        }}
-        title="اقتراح فكرة جديدة"
-        subtitle="New suggestion"
-        footer={
-          <>
-            <Button
-              variant="ghost"
-              onClick={() => {
-                setCreateOpen(false);
-                setSubmitError('');
-              }}
-            >
-              إلغاء
-            </Button>
-            <Button type="submit" form="suggestion-form">
-              <span className="inline-flex items-center gap-2">
-                <FiPlus /> إرسال الاقتراح
-              </span>
-            </Button>
-          </>
-        }
-      >
-        <form id="suggestion-form" className="space-y-4" onSubmit={handleCreateSuggestion}>
-          <Field label="العنوان" hint="اكتب عنوانًا موجزًا للاقتراح (3-200 حرف)">
-            <Input
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="مثال: إضافة ميزة التقارير الشهرية"
-              maxLength={200}
-            />
-          </Field>
-          <Field label="الوصف التفصيلي" hint="اشرح الفكرة بالتفصيل (10-1000 حرف)">
-            <Textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              placeholder="اشرح كيفية ستساهم هذه الفكرة في تطوير المؤسسة..."
-              rows={5}
-              maxLength={1000}
-            />
-          </Field>
-          {submitError && (
-            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
-              {submitError}
-            </div>
-          )}
-        </form>
-      </Modal>
-    </div>
-  );
-}
-
 export default function App() {
   const { isAuthenticated, section, clearError } = useApp();
 
@@ -2118,8 +2168,8 @@ export default function App() {
     complaints: <ComplaintsPage />,
     auditlogs: <AuditLogsPage />,
     committees: <CommitteesPage />,
-    reports: <ReportsPage />,
     suggestions: <SuggestionsPage />,
+    reports: <ReportsPage />,
     profile: <ProfilePage />
   };
 

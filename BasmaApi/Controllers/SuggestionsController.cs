@@ -1,142 +1,153 @@
 using BasmaApi.Contracts;
 using BasmaApi.Data;
 using BasmaApi.Models;
+using BasmaApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace BasmaApi.Controllers;
 
 [ApiController]
-[Route("api/suggestions")]
 [Authorize]
+[Route("api/[controller]")]
 public sealed class SuggestionsController : ControllerBase
 {
-    private readonly AppDbContext _db;
-    private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly AppDbContext _dbContext;
 
-    public SuggestionsController(AppDbContext db, IHttpContextAccessor httpContextAccessor)
+    public SuggestionsController(AppDbContext dbContext)
     {
-        _db = db;
-        _httpContextAccessor = httpContextAccessor;
+        _dbContext = dbContext;
     }
 
-    /// <summary>
-    /// Get all suggestions with pagination
-    /// </summary>
     [HttpGet]
-    public async Task<ActionResult<IEnumerable<SuggestionItemResponse>>> GetSuggestions(
-        [FromQuery] int page = 1,
-        [FromQuery] int pageSize = 10)
+    public async Task<ActionResult<IEnumerable<SuggestionWithVoteResponse>>> List(
+        [FromQuery] string? status = null,
+        [FromQuery] string? search = null,
+        CancellationToken cancellationToken = default)
     {
-        if (page < 1) page = 1;
-        if (pageSize < 1 || pageSize > 50) pageSize = 10;
-
         var currentMemberId = GetCurrentMemberId();
         if (currentMemberId == Guid.Empty)
             return Unauthorized();
 
-        var skip = (page - 1) * pageSize;
-
-        var suggestions = await _db.Suggestions
+        var query = _dbContext.Suggestions
             .Include(s => s.CreatedByMember)
-            .Include(s => s.Votes)
-            .OrderByDescending(s => s.Id)
-            .Skip(skip)
-            .Take(pageSize)
-            .ToListAsync();
+            .Include(s => s.Votes.Where(v => v.VotedByMemberId == currentMemberId))
+            .AsQueryable();
 
-        var response = suggestions.Select(s => new SuggestionItemResponse(
-            SuggestionId: s.Id,
-            Title: s.Title,
-            Description: s.Description,
-            CreatedByName: s.CreatedByMember?.FullName ?? "مستخدم محذوف",
-            CreatedAtUtc: s.CreatedAtUtc,
-            AcceptCount: s.AcceptCount,
-            RejectCount: s.RejectCount,
-            UserVote: s.Votes.FirstOrDefault(v => v.MemberId == currentMemberId)?.IsAccepted
-        )).ToList();
+        if (!string.IsNullOrWhiteSpace(status))
+        {
+            if (Enum.TryParse<SuggestionStatus>(status, true, out var statusEnum))
+            {
+                query = query.Where(s => s.Status == statusEnum);
+            }
+        }
 
-        return Ok(response);
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var searchLower = search.ToLower();
+            query = query.Where(s =>
+                s.Title.ToLower().Contains(searchLower) ||
+                s.Description.ToLower().Contains(searchLower));
+        }
+
+        var suggestions = await query
+            .OrderByDescending(s => s.CreatedAtUtc)
+            .ToListAsync(cancellationToken);
+
+        return Ok(suggestions.Select(s => MapToVoteResponse(s, currentMemberId)));
     }
 
-    /// <summary>
-    /// Create a new suggestion
-    /// </summary>
-    [HttpPost]
-    public async Task<ActionResult<SuggestionDetailResponse>> CreateSuggestion(
-        [FromBody] SuggestionCreateRequest request)
+    [HttpGet("{id}")]
+    public async Task<ActionResult<SuggestionWithVoteResponse>> Get(Guid id, CancellationToken cancellationToken = default)
     {
         var currentMemberId = GetCurrentMemberId();
         if (currentMemberId == Guid.Empty)
             return Unauthorized();
+
+        var suggestion = await _dbContext.Suggestions
+            .Include(s => s.CreatedByMember)
+            .Include(s => s.Votes.Where(v => v.VotedByMemberId == currentMemberId))
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+        if (suggestion is null)
+            return NotFound();
+
+        return Ok(MapToVoteResponse(suggestion, currentMemberId));
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<SuggestionResponse>> Create(
+        SuggestionCreateRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var currentMemberId = GetCurrentMemberId();
+        if (currentMemberId == Guid.Empty)
+            return Unauthorized();
+
+        var currentMember = await _dbContext.Members.FindAsync(new object[] { currentMemberId }, cancellationToken);
+        if (currentMember is null)
+            return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(request.Title) || string.IsNullOrWhiteSpace(request.Description))
+            return BadRequest("العنوان والوصف مطلوبان");
 
         var suggestion = new Suggestion
         {
             Id = Guid.NewGuid(),
+            CreatedAtUtc = DateTime.UtcNow,
+            CreatedByMemberId = currentMemberId,
             Title = request.Title.Trim(),
             Description = request.Description.Trim(),
-            CreatedByMemberId = currentMemberId,
-            CreatedAtUtc = DateTime.UtcNow,
-            AcceptCount = 0,
-            RejectCount = 0
+            Status = SuggestionStatus.Open,
+            AcceptanceCount = 0,
+            RejectionCount = 0
         };
 
-        _db.Suggestions.Add(suggestion);
-        await _db.SaveChangesAsync();
+        _dbContext.Suggestions.Add(suggestion);
+        await _dbContext.SaveChangesAsync(cancellationToken);
 
-        // Reload to get related data
-        await _db.Entry(suggestion).Reference(s => s.CreatedByMember).LoadAsync();
-
-        return CreatedAtAction(nameof(GetSuggestions), new { id = suggestion.Id },
-            new SuggestionDetailResponse(
-                SuggestionId: suggestion.Id,
-                Title: suggestion.Title,
-                Description: suggestion.Description,
-                CreatedByName: suggestion.CreatedByMember?.FullName ?? "مستخدم محذوف",
-                CreatedAtUtc: suggestion.CreatedAtUtc,
-                AcceptCount: suggestion.AcceptCount,
-                RejectCount: suggestion.RejectCount,
-                UserVote: null
-            ));
+        return CreatedAtAction(nameof(Get), new { id = suggestion.Id }, MapToResponse(suggestion, currentMember));
     }
 
-    /// <summary>
-    /// Vote on a suggestion (accept or reject)
-    /// </summary>
-    [HttpPost("{id:guid}/vote")]
-    public async Task<IActionResult> VoteSuggestion(
-        [FromRoute] Guid id,
-        [FromBody] VoteRequest request)
+    [HttpPost("{id}/vote")]
+    public async Task<ActionResult<SuggestionWithVoteResponse>> Vote(
+        Guid id,
+        SuggestionVoteRequest request,
+        CancellationToken cancellationToken = default)
     {
         var currentMemberId = GetCurrentMemberId();
         if (currentMemberId == Guid.Empty)
             return Unauthorized();
 
-        var suggestion = await _db.Suggestions
+        var suggestion = await _dbContext.Suggestions
+            .Include(s => s.CreatedByMember)
             .Include(s => s.Votes)
-            .FirstOrDefaultAsync(s => s.Id == id);
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
-        if (suggestion == null)
-            return NotFound("الاقتراح غير موجود");
+        if (suggestion is null)
+            return NotFound();
 
-        var existingVote = suggestion.Votes.FirstOrDefault(v => v.MemberId == currentMemberId);
-
-        if (existingVote != null)
+        // Check if user already voted
+        var existingVote = suggestion.Votes.FirstOrDefault(v => v.VotedByMemberId == currentMemberId);
+        if (existingVote is not null)
         {
             // Update existing vote
-            var oldVote = existingVote.IsAccepted;
-            existingVote.IsAccepted = request.IsAccepted;
+            // First adjust counts if vote changed
+            if (existingVote.IsAcceptance != request.IsAcceptance)
+            {
+                if (existingVote.IsAcceptance)
+                    suggestion.AcceptanceCount = Math.Max(0, suggestion.AcceptanceCount - 1);
+                else
+                    suggestion.RejectionCount = Math.Max(0, suggestion.RejectionCount - 1);
 
-            if (oldVote && !request.IsAccepted)
-            {
-                suggestion.AcceptCount--;
-                suggestion.RejectCount++;
-            }
-            else if (!oldVote && request.IsAccepted)
-            {
-                suggestion.AcceptCount++;
-                suggestion.RejectCount--;
+                if (request.IsAcceptance)
+                    suggestion.AcceptanceCount++;
+                else
+                    suggestion.RejectionCount++;
+
+                existingVote.IsAcceptance = request.IsAcceptance;
             }
         }
         else
@@ -145,34 +156,96 @@ public sealed class SuggestionsController : ControllerBase
             var vote = new SuggestionVote
             {
                 Id = Guid.NewGuid(),
+                CreatedAtUtc = DateTime.UtcNow,
                 SuggestionId = id,
-                MemberId = currentMemberId,
-                IsAccepted = request.IsAccepted
+                VotedByMemberId = currentMemberId,
+                IsAcceptance = request.IsAcceptance
             };
 
             suggestion.Votes.Add(vote);
-            _db.SuggestionVotes.Add(vote);
 
-            if (request.IsAccepted)
-                suggestion.AcceptCount++;
+            if (request.IsAcceptance)
+                suggestion.AcceptanceCount++;
             else
-                suggestion.RejectCount++;
+                suggestion.RejectionCount++;
         }
 
-        await _db.SaveChangesAsync();
-        return Ok("تم تسجيل التصويت بنجاح");
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        // Reload to get updated vote status
+        var updatedSuggestion = await _dbContext.Suggestions
+            .Include(s => s.CreatedByMember)
+            .Include(s => s.Votes.Where(v => v.VotedByMemberId == currentMemberId))
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+        return Ok(MapToVoteResponse(updatedSuggestion!, currentMemberId));
+    }
+
+    [HttpPut("{id}/status")]
+    [Authorize(Roles = "President,VicePresident,CentralMember")]
+    public async Task<ActionResult<SuggestionResponse>> ChangeStatus(
+        Guid id,
+        SuggestionStatusChangeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        var currentMemberId = GetCurrentMemberId();
+        var currentMember = await _dbContext.Members.FindAsync(new object[] { currentMemberId }, cancellationToken);
+
+        if (currentMember is null || !AccessControl.CanManageUsers(currentMember))
+            return Forbid();
+
+        if (!Enum.TryParse<SuggestionStatus>(request.NewStatus, true, out var newStatus))
+            return BadRequest("حالة غير صحيحة");
+
+        var suggestion = await _dbContext.Suggestions
+            .Include(s => s.CreatedByMember)
+            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+
+        if (suggestion is null)
+            return NotFound();
+
+        suggestion.Status = newStatus;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return Ok(MapToResponse(suggestion, suggestion.CreatedByMember!));
     }
 
     private Guid GetCurrentMemberId()
     {
-        var memberIdClaim = _httpContextAccessor.HttpContext?.User
-            .FindFirst("memberId")?.Value;
-
-        return Guid.TryParse(memberIdClaim, out var memberId) ? memberId : Guid.Empty;
+        var idClaim = User.FindFirst(ClaimTypes.NameIdentifier);
+        return Guid.TryParse(idClaim?.Value, out var id) ? id : Guid.Empty;
     }
-}
 
-public class VoteRequest
-{
-    public bool IsAccepted { get; set; }
+    private SuggestionWithVoteResponse MapToVoteResponse(Suggestion suggestion, Guid currentMemberId)
+    {
+        var currentVote = suggestion.Votes?.FirstOrDefault(v => v.VotedByMemberId == currentMemberId);
+
+        return new SuggestionWithVoteResponse(
+            suggestion.Id,
+            suggestion.Title,
+            suggestion.Description,
+            suggestion.Status.ToString(),
+            suggestion.AcceptanceCount,
+            suggestion.RejectionCount,
+            currentVote?.IsAcceptance,
+            suggestion.CreatedByMember?.FullName ?? "غير معروف",
+            suggestion.CreatedByMember?.Role.ToString() ?? "غير معروف",
+            suggestion.CreatedAtUtc
+        );
+    }
+
+    private SuggestionResponse MapToResponse(Suggestion suggestion, Member createdByMember)
+    {
+        return new SuggestionResponse(
+            suggestion.Id,
+            suggestion.Title,
+            suggestion.Description,
+            suggestion.Status.ToString(),
+            suggestion.AcceptanceCount,
+            suggestion.RejectionCount,
+            createdByMember.FullName,
+            createdByMember.Role.ToString(),
+            suggestion.CreatedAtUtc
+        );
+    }
 }

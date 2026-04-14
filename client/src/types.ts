@@ -15,8 +15,8 @@ export type SectionKey =
   | 'complaints'
   | 'auditlogs'
   | 'committees'
-  | 'reports'
   | 'suggestions'
+  | 'reports'
   | 'profile';
 
 export type ThemeMode = 'dark';
@@ -263,6 +263,26 @@ export type CommitteeOption = {
 
 export type CommitteeCreateFormState = {
   name: string;
+};
+
+export type SuggestionStatus = 'Open' | 'Accepted' | 'Rejected';
+
+export type SuggestionItem = {
+  id: string;
+  title: string;
+  description: string;
+  status: SuggestionStatus;
+  acceptanceCount: number;
+  rejectionCount: number;
+  currentUserVote: boolean | null;
+  createdByMemberName: string;
+  createdByMemberRole: Role;
+  createdAtUtc: string;
+};
+
+export type SuggestionFormState = {
+  title: string;
+  description: string;
 };
 
 export type NavigationItem = {

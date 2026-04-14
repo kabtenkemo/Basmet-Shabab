@@ -1,5 +1,12 @@
 namespace BasmaApi.Models;
 
+public enum SuggestionStatus
+{
+    Open,
+    Accepted,
+    Rejected
+}
+
 public sealed class Suggestion
 {
     public Guid Id { get; set; } = Guid.NewGuid();
@@ -14,9 +21,11 @@ public sealed class Suggestion
 
     public string Description { get; set; } = string.Empty;
 
-    public int AcceptCount { get; set; }
+    public SuggestionStatus Status { get; set; } = SuggestionStatus.Open;
 
-    public int RejectCount { get; set; }
+    public int AcceptanceCount { get; set; }
+
+    public int RejectionCount { get; set; }
 
     public ICollection<SuggestionVote> Votes { get; set; } = new List<SuggestionVote>();
 }
@@ -31,9 +40,9 @@ public sealed class SuggestionVote
 
     public Suggestion? Suggestion { get; set; }
 
-    public Guid MemberId { get; set; }
+    public Guid VotedByMemberId { get; set; }
 
-    public Member? Member { get; set; }
+    public Member? VotedByMember { get; set; }
 
-    public bool IsAccepted { get; set; }
+    public bool IsAcceptance { get; set; }
 }

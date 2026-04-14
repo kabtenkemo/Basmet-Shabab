@@ -1,4 +1,4 @@
-import { FiActivity, FiAward, FiBarChart2, FiCheckSquare, FiLayers, FiLogOut, FiMenu, FiSearch, FiShield, FiUsers, FiMessageSquare, FiUser, FiFileText } from 'react-icons/fi';
+import { FiActivity, FiAward, FiBarChart2, FiCheckSquare, FiLayers, FiLogOut, FiMenu, FiSearch, FiShield, FiUsers, FiMessageSquare, FiUser, FiFileText, FiLightBulb } from 'react-icons/fi';
 import { useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '../context/AppContext';
 import type { SectionKey } from '../types';
@@ -13,6 +13,7 @@ const icons: Record<string, ReactNode> = {
   activity: <FiActivity />,
   layers: <FiLayers />,
   chart: <FiShield />,
+  suggestions: <FiLightBulb />,
   profile: <FiUser />
 };
 

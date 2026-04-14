@@ -4,29 +4,40 @@ namespace BasmaApi.Contracts;
 
 public sealed class SuggestionCreateRequest
 {
-    [Required, MinLength(3), MaxLength(200)]
+    [Required, MaxLength(200)]
     public string Title { get; init; } = string.Empty;
 
-    [Required, MinLength(10), MaxLength(1000)]
+    [Required, MaxLength(2000)]
     public string Description { get; init; } = string.Empty;
 }
 
-public sealed record SuggestionItemResponse(
-    Guid SuggestionId,
+public sealed record SuggestionResponse(
+    Guid Id,
     string Title,
     string Description,
-    string CreatedByName,
-    DateTime CreatedAtUtc,
-    int AcceptCount,
-    int RejectCount,
-    bool? UserVote);
+    string Status,
+    int AcceptanceCount,
+    int RejectionCount,
+    string CreatedByMemberName,
+    string CreatedByMemberRole,
+    DateTime CreatedAtUtc);
 
-public sealed record SuggestionDetailResponse(
-    Guid SuggestionId,
+public sealed record SuggestionWithVoteResponse(
+    Guid Id,
     string Title,
     string Description,
-    string CreatedByName,
-    DateTime CreatedAtUtc,
-    int AcceptCount,
-    int RejectCount,
-    bool? UserVote);
+    string Status,
+    int AcceptanceCount,
+    int RejectionCount,
+    bool? CurrentUserVote,
+    string CreatedByMemberName,
+    string CreatedByMemberRole,
+    DateTime CreatedAtUtc);
+
+public sealed class SuggestionVoteRequest
+{
+    [Required]
+    public bool IsAcceptance { get; init; }
+}
+
+public sealed record SuggestionStatusChangeRequest(string NewStatus);

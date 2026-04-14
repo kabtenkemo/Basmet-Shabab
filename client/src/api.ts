@@ -22,7 +22,9 @@ import type {
   MemberInfo,
   PointFormState,
   TaskFormState,
-  TaskItem
+  TaskItem,
+  SuggestionItem,
+  SuggestionFormState
 } from './types';
 
 const baseURL = '';
@@ -229,14 +231,18 @@ export async function createNews(form: NewsCreateState) {
   return unwrap(api.post<NewsItem>('/api/news', form));
 }
 
-export async function getSuggestions(page: number = 1, pageSize: number = 10) {
-  return unwrap(api.get('/api/suggestions', { params: { page, pageSize } }));
+export async function getSuggestions(status?: string) {
+  const params = new URLSearchParams();
+  if (status) {
+    params.set('status', status);
+  }
+  return unwrap(api.get<SuggestionItem[]>(`/api/suggestions${params.toString() ? '?' + params.toString() : ''}`));
 }
 
-export async function createSuggestion(title: string, description: string) {
-  return unwrap(api.post('/api/suggestions', { title, description }));
+export async function createSuggestion(form: SuggestionFormState) {
+  return unwrap(api.post<SuggestionItem>('/api/suggestions', form));
 }
 
-export async function voteSuggestion(suggestionId: string, isAccepted: boolean) {
-  return unwrap(api.post(`/api/suggestions/${suggestionId}/vote`, { isAccepted }));
+export async function voteSuggestion(id: string, isAcceptance: boolean) {
+  return unwrap(api.post<SuggestionItem>(`/api/suggestions/${id}/vote`, { isAcceptance }));
 }
