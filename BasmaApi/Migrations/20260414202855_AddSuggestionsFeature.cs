@@ -11,9 +11,16 @@ namespace BasmaApi.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Complaints_Members_AssignedToMemberId",
-                table: "Complaints");
+            migrationBuilder.Sql(@"
+IF EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = 'FK_Complaints_Members_AssignedToMemberId'
+)
+BEGIN
+    ALTER TABLE [Complaints] DROP CONSTRAINT [FK_Complaints_Members_AssignedToMemberId];
+END
+");
 
             migrationBuilder.AddColumn<string>(
                 name: "AudienceType",
@@ -301,21 +308,33 @@ namespace BasmaApi.Migrations
                 columns: new[] { "TaskId", "Role" },
                 unique: true);
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Complaints_Members_AssignedToMemberId",
-                table: "Complaints",
-                column: "AssignedToMemberId",
-                principalTable: "Members",
-                principalColumn: "Id",
-                onDelete: ReferentialAction.SetNull);
+            migrationBuilder.Sql(@"
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = 'FK_Complaints_Members_AssignedToMemberId'
+)
+BEGIN
+    ALTER TABLE [Complaints]
+    ADD CONSTRAINT [FK_Complaints_Members_AssignedToMemberId]
+    FOREIGN KEY ([AssignedToMemberId]) REFERENCES [Members]([Id]) ON DELETE SET NULL;
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_Complaints_Members_AssignedToMemberId",
-                table: "Complaints");
+            migrationBuilder.Sql(@"
+IF EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = 'FK_Complaints_Members_AssignedToMemberId'
+)
+BEGIN
+    ALTER TABLE [Complaints] DROP CONSTRAINT [FK_Complaints_Members_AssignedToMemberId];
+END
+");
 
             migrationBuilder.DropTable(
                 name: "Committees");
@@ -360,12 +379,18 @@ namespace BasmaApi.Migrations
                 name: "MustChangePassword",
                 table: "Members");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_Complaints_Members_AssignedToMemberId",
-                table: "Complaints",
-                column: "AssignedToMemberId",
-                principalTable: "Members",
-                principalColumn: "Id");
+            migrationBuilder.Sql(@"
+IF NOT EXISTS (
+    SELECT 1
+    FROM sys.foreign_keys
+    WHERE name = 'FK_Complaints_Members_AssignedToMemberId'
+)
+BEGIN
+    ALTER TABLE [Complaints]
+    ADD CONSTRAINT [FK_Complaints_Members_AssignedToMemberId]
+    FOREIGN KEY ([AssignedToMemberId]) REFERENCES [Members]([Id]);
+END
+");
         }
     }
 }
