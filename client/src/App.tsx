@@ -1636,6 +1636,7 @@ function CommitteesPage() {
 }
 
 function SuggestionsPage() {
+  const { appendActivity } = useApp();
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
   const [page, setPage] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
@@ -1670,6 +1671,9 @@ function SuggestionsPage() {
       setCreateOpen(false);
       const result = await getSuggestions();
       setSuggestions(result);
+      if (appendActivity) {
+        appendActivity('تقديم مقترح', `تم تقديم مقترح: ${form.title}`, 'success');
+      }
     } catch {
       return;
     }
@@ -1830,13 +1834,14 @@ function SuggestionsPage() {
           className="space-y-4"
           onSubmit={(event) => void saveSuggestion(event)}
         >
-          <Field label="عنوان الاقتراح">
+          <Field label="عنوان المقترح">
             <Input
               value={form.title}
               onChange={(event) =>
                 setForm((current) => ({ ...current, title: event.target.value }))
               }
               placeholder="ملخص الفكرة أو الاقتراح"
+              required
             />
           </Field>
           <Field label="الوصف التفصيلي">
@@ -1850,6 +1855,7 @@ function SuggestionsPage() {
               }
               rows={6}
               placeholder="شرح مفصل للمقتراح والفوائد المتوقعة"
+              required
             />
           </Field>
         </form>
