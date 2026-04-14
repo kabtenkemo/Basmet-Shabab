@@ -228,6 +228,8 @@ export function AppProvider({ children }: PropsWithChildren) {
 
     setLoading(true);
     setError('');
+    let isRetry = false;
+
     try {
       const profile = await getMe();
       const currentMember = mapMemberProfile(profile);
@@ -245,38 +247,56 @@ export function AppProvider({ children }: PropsWithChildren) {
       }
 
       const [dashboardResult, tasksResult, complaintsResult, newsResult] = await Promise.allSettled([
-        getDashboard(),
-        getTasks(),
-        getMyComplaints(),
-        getNews()
+        getDashboard().catch(err => {
+          console.warn('Failed to load dashboard:', err);
+          return null;
+        }),
+        getTasks().catch(err => {
+          console.warn('Failed to load tasks:', err);
+          return [];
+        }),
+        getMyComplaints().catch(err => {
+          console.warn('Failed to load complaints:', err);
+          return [];
+        }),
+        getNews().catch(err => {
+          console.warn('Failed to load news:', err);
+          return [];
+        })
       ]);
 
-      if (dashboardResult.status === 'fulfilled') {
+      if (dashboardResult.status === 'fulfilled' && dashboardResult.value) {
         setDashboard(dashboardResult.value);
       }
 
       if (tasksResult.status === 'fulfilled') {
-        setTasks(tasksResult.value);
+        setTasks(tasksResult.value || []);
       }
 
       if (complaintsResult.status === 'fulfilled') {
-        setMyComplaints(complaintsResult.value);
+        setMyComplaints(complaintsResult.value || []);
       }
 
       if (newsResult.status === 'fulfilled') {
-        setNews(newsResult.value);
+        setNews(newsResult.value || []);
       }
 
       if (currentMember.role === 'President' || currentMember.role === 'VicePresident' || hasPermission(currentMember, 'Users.Manage')) {
-        const membersResult = await getMembers().catch(() => [] as MemberAdminItem[]);
-        setMembers(membersResult);
+        const membersResult = await getMembers().catch(err => {
+          console.warn('Failed to load members:', err);
+          return [] as MemberAdminItem[];
+        });
+        setMembers(membersResult || []);
       } else {
         setMembers([]);
       }
 
       if (currentMember.role === 'President' || currentMember.role === 'VicePresident' || hasPermission(currentMember, 'Complaints.Manage')) {
-        const complaintsListResult = await getComplaints().catch(() => [] as ComplaintItem[]);
-        setComplaints(complaintsListResult);
+        const complaintsListResult = await getComplaints().catch(err => {
+          console.warn('Failed to load complaints list:', err);
+          return [] as ComplaintItem[];
+        });
+        setComplaints(complaintsListResult || []);
       } else {
         setComplaints([]);
       }
@@ -285,7 +305,9 @@ export function AppProvider({ children }: PropsWithChildren) {
         setSection('overview');
       }
     } catch (loadError) {
-      setError(loadError instanceof Error ? loadError.message : 'تعذر تحميل البيانات');
+      const errorMsg = loadError instanceof Error ? loadError.message : 'تعذر تحميل البيانات';
+      setError(errorMsg);
+      console.error('Session load failed:', errorMsg);
     } finally {
       setLoading(false);
     }
@@ -329,11 +351,19 @@ export function AppProvider({ children }: PropsWithChildren) {
     setLoading(true);
     setError('');
     try {
-      const response = await login(email, password);
+      // Trim and validate inputs
+      const trimmedEmail = email.trim().toLowerCase();
+      const trimmedPassword = password.trim();
+
+      if (!trimmedEmail || !trimmedPassword) {
+        throw new Error('البريد الإلكتروني وكلمة المرور مطلوبان.');
+      }
+
+      const response = await login(trimmedEmail, trimmedPassword);
       setUser({
         id: response.memberId,
         fullName: response.fullName,
-        email: response.email,
+        email: response.email.toLowerCase(),
         role: response.role,
         nationalId: response.nationalId,
         birthDate: response.birthDate,
@@ -348,7 +378,9 @@ export function AppProvider({ children }: PropsWithChildren) {
       setActivityLogs((current) => [createLog('تسجيل الدخول', `تم تسجيل دخول ${response.fullName}`, 'success'), ...current]);
       void loadSession(response.token);
     } catch (loginError) {
-      setError(loginError instanceof Error ? loginError.message : 'تعذر تنفيذ الطلب');
+      const errorMessage = loginError instanceof Error ? loginError.message : 'تعذر تنفيذ عملية تسجيل الدخول';
+      setError(errorMessage);
+      console.error('Login failed:', errorMessage);
       throw loginError;
     } finally {
       setLoading(false);

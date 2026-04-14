@@ -34,7 +34,8 @@ const api = axios.create({
   baseURL,
   headers: {
     'Content-Type': 'application/json'
-  }
+  },
+  timeout: 20000
 });
 
 api.interceptors.request.use((config) => {
@@ -46,6 +47,19 @@ api.interceptors.request.use((config) => {
 
   return config;
 });
+
+// Response interceptor to handle errors globally
+api.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle 401 - clear token and require login
+    if (error.response?.status === 401) {
+      localStorage.removeItem(authTokenKey);
+      window.location.href = '/';
+    }
+    return Promise.reject(error);
+  }
+);
 
 function getErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -59,11 +73,23 @@ function getErrorMessage(error: unknown) {
     }
 
     if (error.response?.status === 401) {
-      return 'يجب تسجيل الدخول مرة أخرى.';
+      return 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.';
     }
 
     if (error.response?.status === 403) {
       return 'ليس لديك صلاحية لتنفيذ هذا الطلب.';
+    }
+
+    if (error.response?.status === 500) {
+      return 'خطأ في الخادم. يرجى محاولة لاحقاً.';
+    }
+
+    if (error.code === 'ECONNABORTED') {
+      return 'انقطع الاتصال. يرجى التحقق من اتصال الإنترنت.';
+    }
+
+    if (error.code === 'ENOTFOUND' || error.code === 'NETWORK_ERROR') {
+      return 'لا يمكن الوصول للخادم. تحقق من الاتصال.';
     }
   }
 

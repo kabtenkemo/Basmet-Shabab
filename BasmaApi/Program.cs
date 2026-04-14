@@ -195,30 +195,65 @@ using (var scope = app.Services.CreateScope())
         }
         else
         {
-            var emailChanged = !string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase);
-            var oldHashPresent = !string.IsNullOrWhiteSpace(president.PasswordHash);
-            
-            president.FullName = string.IsNullOrWhiteSpace(president.FullName) ? "رئيس الكيان" : president.FullName;
-            president.Email = targetPresidentEmail.ToLowerInvariant();
-            president.NationalId = string.IsNullOrWhiteSpace(president.NationalId) ? "00000000000001" : president.NationalId;
-            president.BirthDate ??= new DateOnly(1980, 1, 1);
-            president.MustChangePassword = false;
-            
-            var newHash = passwordService.HashPassword(targetPresidentPassword);
-            if (string.IsNullOrWhiteSpace(newHash))
+            // Only update if needed
+            bool needsUpdate = false;
+
+            // Check if email needs updating
+            if (!string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("Failed to hash president password during update!");
+                president.Email = targetPresidentEmail.ToLowerInvariant();
+                needsUpdate = true;
+                startupLogger.LogInformation("🔄 President email updated: {OldEmail} → {NewEmail}", 
+                    "****", targetPresidentEmail.ToLowerInvariant());
             }
-            
-            president.PasswordHash = newHash;
-            dbContext.SaveChanges();
-            
-            startupLogger.LogInformation(
-                "✅ Updated President account: EmailChanged={EmailChanged}, OldHashPresent={OldHashPresent}, NewHashLength={NewHashLength}, Email={Email}",
-                emailChanged,
-                oldHashPresent,
-                newHash.Length,
-                targetPresidentEmail.ToLowerInvariant());
+
+            // Only update missing fields
+            if (string.IsNullOrWhiteSpace(president.FullName))
+            {
+                president.FullName = "رئيس الكيان";
+                needsUpdate = true;
+            }
+
+            if (string.IsNullOrWhiteSpace(president.NationalId))
+            {
+                president.NationalId = "00000000000001";
+                needsUpdate = true;
+            }
+
+            if (president.BirthDate is null)
+            {
+                president.BirthDate = new DateOnly(1980, 1, 1);
+                needsUpdate = true;
+            }
+
+            // Check if password needs updating (only if hash is invalid or missing)
+            if (string.IsNullOrWhiteSpace(president.PasswordHash))
+            {
+                var newHash = passwordService.HashPassword(targetPresidentPassword);
+                if (string.IsNullOrWhiteSpace(newHash))
+                {
+                    throw new InvalidOperationException("Failed to hash president password!");
+                }
+                president.PasswordHash = newHash;
+                needsUpdate = true;
+                startupLogger.LogInformation("🔐 President password hash was missing, now set");
+            }
+
+            if (president.MustChangePassword != false)
+            {
+                president.MustChangePassword = false;
+                needsUpdate = true;
+            }
+
+            if (needsUpdate)
+            {
+                dbContext.SaveChanges();
+                startupLogger.LogInformation("✅ Updated President account (only changed fields)");
+            }
+            else
+            {
+                startupLogger.LogInformation("ℹ️ President account already configured correctly - skipping update");
+            }
         }
     }
     catch (Exception ex)
@@ -473,6 +508,28 @@ static void SeedReferenceData(AppDbContext dbContext)
         dbContext.SaveChanges();
     }
 }
+
+// Global exception handling
+app.UseExceptionHandler(errorApp =>
+{
+    errorApp.Run(async context =>
+    {
+        context.Response.StatusCode = StatusCodes.Status500InternalServerError;
+        context.Response.ContentType = "application/json";
+        
+        var exceptionHandlerPathFeature = context.Features.Get<Microsoft.AspNetCore.Diagnostics.IExceptionHandlerPathFeature>();
+        var exception = exceptionHandlerPathFeature?.Error;
+        
+        var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
+        logger.LogError(exception, "Unhandled exception occurred");
+        
+        await context.Response.WriteAsJsonAsync(new
+        {
+            message = "حدث خطأ في الخادم. يرجى محاولة مرة أخرى لاحقاً.",
+            error = app.Environment.IsDevelopment() ? exception?.Message : null
+        });
+    });
+});
 
 app.UseSwagger();
 app.UseSwaggerUI();
