@@ -1,4 +1,5 @@
 using System.Text;
+using System.Threading.RateLimiting;
 using BasmaApi.Data;
 using BasmaApi.Middleware;
 using BasmaApi.Models;
@@ -118,42 +119,27 @@ builder.Services.AddRateLimiter(options =>
         context.HttpContext.Response.ContentType = "application/json";
         await context.HttpContext.Response.WriteAsJsonAsync(new
         {
-            message = "تم تجاوز حد الطلبات. يرجى المحاولة لاحقاً.",
-            retryAfter = context.RetryAfter.TotalSeconds
+            message = "تم تجاوز حد الطلبات. يرجى المحاولة لاحقاً."
         }, cancellationToken);
     };
 });
+
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
     options.KnownIPNetworks.Clear();
     options.KnownProxies.Clear();
 });
 
-// JWT configuration - MUST be configured in production
+// JWT configuration - get from configuration
 var jwtKey = builder.Configuration["Jwt:Key"];
 var jwtIssuer = builder.Configuration["Jwt:Issuer"];
 var jwtAudience = builder.Configuration["Jwt:Audience"];
 
-// FIX: Require JWT configuration in production
-if (app.Environment.IsProduction())
-{
-    if (string.IsNullOrEmpty(jwtKey))
-        throw new InvalidOperationException("CRITICAL: Jwt:Key must be configured in production. Set environment variable Jwt__Key");
-    if (string.IsNullOrEmpty(jwtIssuer))
-        throw new InvalidOperationException("CRITICAL: Jwt:Issuer must be configured in production.");
-    if (string.IsNullOrEmpty(jwtAudience))
-        throw new InvalidOperationException("CRITICAL: Jwt:Audience must be configured in production.");
-}
-
-// Use secure defaults for development
+// Use secure defaults for development if not configured
 jwtKey ??= "dev-key-1234567890123456789012345678901234567890";
 jwtIssuer ??= "basmet-shabab-dev";
 jwtAudience ??= "basmet-shabab-client-dev";
-
-if (!app.Environment.IsProduction())
-{
-    Console.WriteLine("⚠️  Running in Development mode with default JWT keys. Configure for production.");
-}
 
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -192,6 +178,22 @@ builder.Services
 builder.Services.AddAuthorization();
 
 var app = builder.Build();
+
+// FIX: Require JWT configuration in production
+if (app.Environment.IsProduction())
+{
+    if (string.IsNullOrEmpty(builder.Configuration["Jwt:Key"]))
+        throw new InvalidOperationException("CRITICAL: Jwt:Key must be configured in production. Set environment variable Jwt__Key");
+    if (string.IsNullOrEmpty(builder.Configuration["Jwt:Issuer"]))
+        throw new InvalidOperationException("CRITICAL: Jwt:Issuer must be configured in production.");
+    if (string.IsNullOrEmpty(builder.Configuration["Jwt:Audience"]))
+        throw new InvalidOperationException("CRITICAL: Jwt:Audience must be configured in production.");
+}
+
+if (!app.Environment.IsProduction())
+{
+    Console.WriteLine("⚠️  Running in Development mode with default JWT keys. Configure for production.");
+}
 
 using (var scope = app.Services.CreateScope())
 {
