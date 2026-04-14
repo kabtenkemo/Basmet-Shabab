@@ -15,10 +15,12 @@ namespace BasmaApi.Controllers;
 public sealed class SuggestionsController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
+    private readonly ILogger<SuggestionsController> _logger;
 
-    public SuggestionsController(AppDbContext dbContext)
+    public SuggestionsController(AppDbContext dbContext, ILogger<SuggestionsController> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -106,7 +108,23 @@ public sealed class SuggestionsController : ControllerBase
         };
 
         _dbContext.Suggestions.Add(suggestion);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException dbEx)
+        {
+            _logger.LogError(dbEx, "Failed to create suggestion for member {MemberId}", currentMemberId);
+
+            if (IsMissingSuggestionsSchema(dbEx))
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "قاعدة البيانات غير محدثة لميزة المقترحات. يرجى تشغيل EF migrations على بيئة الإنتاج.");
+            }
+
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                "تعذر حفظ المقترح بسبب خطأ في قاعدة البيانات.");
+        }
 
         return CreatedAtAction(nameof(Get), new { id = suggestion.Id }, MapToResponse(suggestion, currentMember));
     }
@@ -170,7 +188,23 @@ public sealed class SuggestionsController : ControllerBase
                 suggestion.RejectionCount++;
         }
 
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException dbEx)
+        {
+            _logger.LogError(dbEx, "Failed to save vote for suggestion {SuggestionId} by member {MemberId}", id, currentMemberId);
+
+            if (IsMissingSuggestionsSchema(dbEx))
+            {
+                return StatusCode(StatusCodes.Status500InternalServerError,
+                    "قاعدة البيانات غير محدثة لميزة المقترحات. يرجى تشغيل EF migrations على بيئة الإنتاج.");
+            }
+
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                "تعذر حفظ التصويت بسبب خطأ في قاعدة البيانات.");
+        }
 
         // Reload to get updated vote status
         var updatedSuggestion = await _dbContext.Suggestions
@@ -214,6 +248,14 @@ public sealed class SuggestionsController : ControllerBase
     {
         var idClaim = User.FindFirst(ClaimTypes.NameIdentifier);
         return Guid.TryParse(idClaim?.Value, out var id) ? id : Guid.Empty;
+    }
+
+    private static bool IsMissingSuggestionsSchema(DbUpdateException exception)
+    {
+        var message = exception.ToString();
+        return message.Contains("Invalid object name", StringComparison.OrdinalIgnoreCase)
+            && (message.Contains("Suggestions", StringComparison.OrdinalIgnoreCase)
+                || message.Contains("SuggestionVotes", StringComparison.OrdinalIgnoreCase));
     }
 
     private SuggestionWithVoteResponse MapToVoteResponse(Suggestion suggestion, Guid currentMemberId)

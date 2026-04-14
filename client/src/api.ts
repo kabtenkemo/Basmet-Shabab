@@ -64,13 +64,21 @@ api.interceptors.response.use(
 
 function getErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
-    const data = error.response?.data as { message?: string } | string | undefined;
+    const data = error.response?.data as { message?: string; detail?: string; title?: string } | string | undefined;
     if (typeof data === 'string') {
       return data;
     }
 
     if (data?.message) {
       return data.message;
+    }
+
+    if (data?.detail) {
+      return data.detail;
+    }
+
+    if (data?.title) {
+      return data.title;
     }
 
     if (error.response?.status === 401) {
