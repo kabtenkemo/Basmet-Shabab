@@ -184,7 +184,7 @@ public sealed class AppDbContext : DbContext
             entity.HasOne(complaint => complaint.AssignedToMember)
                 .WithMany()
                 .HasForeignKey(complaint => complaint.AssignedToMemberId)
-                .OnDelete(DeleteBehavior.SetNull);
+                .OnDelete(DeleteBehavior.NoAction);
 
             entity.HasOne(complaint => complaint.ReviewedByMember)
                 .WithMany()
@@ -274,6 +274,27 @@ public sealed class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(item => item.MemberId)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<Suggestion>(entity =>
+        {
+            entity.HasOne(suggestion => suggestion.CreatedByMember)
+                .WithMany()
+                .HasForeignKey(suggestion => suggestion.CreatedByMemberId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<SuggestionVote>(entity =>
+        {
+            entity.HasOne(vote => vote.Suggestion)
+                .WithMany(suggestion => suggestion.Votes)
+                .HasForeignKey(vote => vote.SuggestionId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(vote => vote.VotedByMember)
+                .WithMany()
+                .HasForeignKey(vote => vote.VotedByMemberId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
     }
 
