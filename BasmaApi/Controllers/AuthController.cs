@@ -15,13 +15,15 @@ public sealed class AuthController : ControllerBase
     private readonly IPasswordService _passwordService;
     private readonly IAuditLogService _auditLogService;
     private readonly ITokenService _tokenService;
+    private readonly ILogger<AuthController>? _logger;
 
-    public AuthController(AppDbContext dbContext, IPasswordService passwordService, IAuditLogService auditLogService, ITokenService tokenService)
+    public AuthController(AppDbContext dbContext, IPasswordService passwordService, IAuditLogService auditLogService, ITokenService tokenService, ILogger<AuthController>? logger = null)
     {
         _dbContext = dbContext;
         _passwordService = passwordService;
         _auditLogService = auditLogService;
         _tokenService = tokenService;
+        _logger = logger;
     }
 
     [HttpPost("register")]
@@ -36,6 +38,29 @@ public sealed class AuthController : ControllerBase
         // FIX: Normalize email to lowercase for case-insensitive search
         // This prevents login failures when user enters "PRESIDENT@BASMET.LOCAL" instead of "president@basmet.local"
         var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
+        var currentIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
+        
+        // Validate input
+        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.Password))
+        {
+            return Unauthorized(new { message = "البريد الإلكتروني وكلمة المرور مطلوبان." });
+        }
+
+        // Rate limiting: check for recent failed attempts
+        var recentFailedAttempts = await _dbContext.AuditLogs
+            .AsNoTracking()
+            .Where(log =>
+                log.ActionType == "Login_Failed" &&
+                log.IPAddress == currentIpAddress &&
+                log.TimestampUtc > DateTime.UtcNow.AddMinutes(-15))
+            .CountAsync(cancellationToken);
+
+        if (recentFailedAttempts >= 10)
+        {
+            await LogFailedLogin(email, currentIpAddress, "متعددة محاولات فاشلة من نفس الـ IP", cancellationToken);
+            return StatusCode(StatusCodes.Status429TooManyRequests,
+                new { message = "تم تجاوز عدد محاولات الدخول المسموحة. يرجى المحاولة بعد 15 دقيقة." });
+        }
         
         var member = await _dbContext.Members
             .Include(candidate => candidate.PermissionGrants)
@@ -43,19 +68,15 @@ public sealed class AuthController : ControllerBase
         
         if (member is null)
         {
-            return Unauthorized(new { message = "بيانات الدخول غير صحيحة." });
+            await LogFailedLogin(email, currentIpAddress, "بريد إلكتروني غير موجود", cancellationToken);
+            return Unauthorized(new { message = "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
         }
 
         // Validate that password hash exists
         if (string.IsNullOrWhiteSpace(member.PasswordHash))
         {
-            return Unauthorized(new { message = "بيانات الدخول غير صحيحة. حساب بدون كلمة سر." });
-        }
-
-        // Validate password is provided
-        if (string.IsNullOrWhiteSpace(request.Password))
-        {
-            return Unauthorized(new { message = "كلمة المرور مطلوبة." });
+            await LogFailedLogin(email, currentIpAddress, "حساب بدون كلمة سر", cancellationToken);
+            return Unauthorized(new { message = "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
         }
 
         try
@@ -63,24 +84,27 @@ public sealed class AuthController : ControllerBase
             var passwordVerified = _passwordService.VerifyPassword(request.Password, member.PasswordHash);
             if (!passwordVerified)
             {
-                return Unauthorized(new { message = "بيانات الدخول غير صحيحة." });
+                await LogFailedLogin(email, currentIpAddress, "كلمة سر غير صحيحة", cancellationToken);
+                return Unauthorized(new { message = "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
             }
         }
         catch (Exception ex)
         {
-            return Unauthorized(new { message = "خطأ في التحقق من كلمة المرور.", error = ex.Message });
+            _logger?.LogError(ex, "خطأ في التحقق من كلمة المرور للعضو {MemberId}", member.Id);
+            await LogFailedLogin(email, currentIpAddress, $"خطأ في التحقق: {ex.Message}", cancellationToken);
+            return Unauthorized(new { message = "خطأ تقني في التحقق. يرجى المحاولة بعد قليل." });
         }
 
         var (token, expiresAtUtc) = _tokenService.CreateToken(member);
         await _auditLogService.RecordAsync(
-            "Login",
+            "Login_Success",
             "User",
             member.Id,
             member.FullName,
-            HttpContext.Connection.RemoteIpAddress?.ToString(),
+            currentIpAddress,
             member.Id.ToString(),
             null,
-            new { member.FullName, member.Email, member.Role },
+            new { member.FullName, member.Email, member.Role, expiresAtUtc },
             cancellationToken);
 
         return Ok(new AuthResponse(
@@ -97,6 +121,27 @@ public sealed class AuthController : ControllerBase
             member.MustChangePassword,
             token,
             expiresAtUtc));
+    }
+
+    private async Task LogFailedLogin(string email, string ipAddress, string reason, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _auditLogService.RecordAsync(
+                "Login_Failed",
+                "User",
+                null,
+                email,
+                ipAddress,
+                null,
+                null,
+                new { reason },
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogError(ex, "خطأ في تسجيل محاولة دخول فاشلة");
+        }
     }
 
     [HttpPost("change-password")]

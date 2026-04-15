@@ -89,16 +89,26 @@ function getErrorMessage(error: unknown) {
       return 'ليس لديك صلاحية لتنفيذ هذا الطلب.';
     }
 
+    if (error.response?.status === 429) {
+      return 'تم تجاوز الحد المسموح به من الطلبات. حاول بعد قليل.';
+    }
+
     if (error.response?.status === 500) {
       return 'خطأ في الخادم. يرجى محاولة لاحقاً.';
     }
 
+    // Network errors
     if (error.code === 'ECONNABORTED') {
       return 'انقطع الاتصال. يرجى التحقق من اتصال الإنترنت.';
     }
 
-    if (error.code === 'ENOTFOUND' || error.code === 'NETWORK_ERROR') {
-      return 'لا يمكن الوصول للخادم. تحقق من الاتصال.';
+    if (error.code === 'ENOTFOUND' || error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED') {
+      return 'لا يمكن الوصول للخادم. تحقق من اتصالك بالإنترنت.';
+    }
+
+    // Timeout
+    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET') {
+      return 'انتهت مهلة الاتصال. الخادم قد يكون مشغولاً.';
     }
   }
 

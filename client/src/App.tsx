@@ -288,23 +288,71 @@ function LoginView() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
+  const [capsLockDetected, setCapsLockDetected] = useState(false);
+  const [attemptCount, setAttemptCount] = useState(0);
 
   useEffect(() => {
     clearError();
   }, [clearError]);
+
+  const validateEmail = (value: string): boolean => {
+    // Basic email validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(value.trim());
+  };
+
+  const handlePasswordKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
+    // Detect CAPS LOCK
+    const capsLockOn = event.getModifierState('CapsLock');
+    setCapsLockDetected(capsLockOn);
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     setFormError('');
 
     const trimmedEmail = email.trim();
-    if (!trimmedEmail || !password.trim()) {
-      setFormError('البريد الإلكتروني وكلمة المرور مطلوبان.');
+    const trimmedPassword = password.trim();
+
+    // Validate inputs
+    if (!trimmedEmail) {
+      setFormError('البريد الإلكتروني مطلوب.');
       return;
     }
 
-    await loginUser(trimmedEmail, password);
+    if (!validateEmail(trimmedEmail)) {
+      setFormError('البريد الإلكتروني غير صحيح. مثال: president@basmet.local');
+      return;
+    }
+
+    if (!trimmedPassword) {
+      setFormError('كلمة المرور مطلوبة.');
+      return;
+    }
+
+    if (trimmedPassword.length < 6) {
+      setFormError('كلمة المرور قصيرة جدًا (يجب أن تكون 6 أحرف على الأقل).');
+      return;
+    }
+
+    // Prevent too many attempts
+    if (attemptCount >= 5) {
+      setFormError('تم تجاوز عدد محاولات تسجيل الدخول. يرجى الانتظار قليلًا ثم المحاولة مرة أخرى.');
+      return;
+    }
+
+    try {
+      await loginUser(trimmedEmail, trimmedPassword);
+    } catch {
+      // Increment attempt counter on failure
+      setAttemptCount((prev) => prev + 1);
+    }
   };
+
+  const warningMessages = [];
+  if (capsLockDetected) {
+    warningMessages.push('⚠️ Caps Lock مفعّل - انتبه من حالة الأحرف');
+  }
 
   return (
     <main className="grid min-h-screen lg:grid-cols-[1.25fr_0.75fr]">
@@ -344,22 +392,66 @@ function LoginView() {
       <section className="flex items-center justify-center px-6 py-10 sm:px-10 lg:px-12">
         <Card title={loginTitle()} subtitle="Authentication" className="w-full max-w-xl">
           <form className="space-y-4" onSubmit={submit}>
-            <Field label="البريد الإلكتروني">
-              <Input value={email} onChange={(event) => setEmail(event.target.value)} type="email" placeholder="president@basmet.local" />
+            <Field label="البريد الإلكتروني" hint="مثال: president@basmet.local">
+              <Input
+                value={email}
+                onChange={(event) => setEmail(event.target.value)}
+                type="email"
+                placeholder="president@basmet.local"
+                disabled={loading}
+                autoComplete="email"
+              />
             </Field>
+
             <Field label="كلمة المرور">
-              <Input value={password} onChange={(event) => setPassword(event.target.value)} type="password" placeholder="••••••••" />
+              <Input
+                value={password}
+                onChange={(event) => setPassword(event.target.value)}
+                onKeyDown={handlePasswordKeyPress}
+                type="password"
+                placeholder="••••••••"
+                disabled={loading}
+                autoComplete="current-password"
+              />
             </Field>
 
-            {(formError || error) && <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{formError || error}</div>}
+            {warningMessages.length > 0 && (
+              <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
+                {warningMessages.join(' · ')}
+              </div>
+            )}
 
-            <Button type="submit" className="w-full" disabled={loading}>
-              {loading ? 'جاري تسجيل الدخول...' : 'دخول'}
+            {(formError || error) && (
+              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
+                {formError || error}
+              </div>
+            )}
+
+            {attemptCount > 0 && attemptCount < 5 && (
+              <div className="rounded-2xl border border-slate-400/20 bg-slate-400/10 px-4 py-3 text-xs text-slate-300">
+                محاولات متبقية: {5 - attemptCount}
+              </div>
+            )}
+
+            <Button type="submit" className="w-full" disabled={loading || attemptCount >= 5}>
+              {loading ? (
+                <span className="inline-flex items-center gap-2">
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
+                  جاري تسجيل الدخول...
+                </span>
+              ) : (
+                'دخول'
+              )}
             </Button>
           </form>
 
           <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
-            التسجيل الخارجي مغلق. الحسابات تُنشأ من داخل النظام فقط.
+            <p className="font-semibold text-white mb-2">ملاحظات مهمة:</p>
+            <ul className="list-inside space-y-1">
+              <li>• التسجيل الخارجي مغلق - الحسابات تُنشأ من داخل النظام فقط</li>
+              <li>• البريد الإلكتروني: lowercase فقط (مثال: president@basmet.local)</li>
+              <li>• إذا نسيت كلمة المرور، تواصل مع المسؤول</li>
+            </ul>
           </div>
         </Card>
       </section>

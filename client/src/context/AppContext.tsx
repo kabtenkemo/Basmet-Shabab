@@ -362,26 +362,70 @@ export function AppProvider({ children }: PropsWithChildren) {
         throw new Error('البريد الإلكتروني وكلمة المرور مطلوبان.');
       }
 
-      const response = await login(trimmedEmail, trimmedPassword);
+      // Validate email format
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(trimmedEmail)) {
+        throw new Error('صيغة البريد الإلكتروني غير صحيحة.');
+      }
+
+      let response;
+      let retries = 2;
+      
+      while (retries >= 0) {
+        try {
+          response = await login(trimmedEmail, trimmedPassword);
+          break;
+        } catch (err) {
+          if (retries > 0 && err instanceof Error && 
+              (err.message.includes('Network') || err.message.includes('timeout'))) {
+            retries--;
+            // Wait before retry
+            await new Promise(resolve => setTimeout(resolve, 500));
+          } else {
+            throw err;
+          }
+        }
+      }
+
       setUser({
-        id: response.memberId,
-        fullName: response.fullName,
-        email: response.email.toLowerCase(),
-        role: response.role,
-        nationalId: response.nationalId,
-        birthDate: response.birthDate,
-        governorName: response.governorName,
-        committeeName: response.committeeName,
-        points: response.points,
-        permissions: response.permissions,
-        mustChangePassword: response.mustChangePassword
+        id: response!.memberId,
+        fullName: response!.fullName,
+        email: response!.email.toLowerCase(),
+        role: response!.role,
+        nationalId: response!.nationalId,
+        birthDate: response!.birthDate,
+        governorName: response!.governorName,
+        committeeName: response!.committeeName,
+        points: response!.points,
+        permissions: response!.permissions,
+        mustChangePassword: response!.mustChangePassword
       });
-      setToken(response.token);
-      setStoredToken(response.token);
-      setActivityLogs((current) => [createLog('تسجيل الدخول', `تم تسجيل دخول ${response.fullName}`, 'success'), ...current]);
-      void loadSession(response.token);
+      setToken(response!.token);
+      setStoredToken(response!.token);
+      setActivityLogs((current) => [createLog('تسجيل الدخول', `تم تسجيل دخول ${response!.fullName}`, 'success'), ...current]);
+      void loadSession(response!.token);
     } catch (loginError) {
-      const errorMessage = loginError instanceof Error ? loginError.message : 'تعذر تنفيذ عملية تسجيل الدخول';
+      let errorMessage = 'تعذر تنفيذ عملية تسجيل الدخول';
+      
+      if (loginError instanceof Error) {
+        errorMessage = loginError.message;
+      } else if (typeof loginError === 'string') {
+        errorMessage = loginError;
+      }
+
+      // Provide helpful hints
+      if (errorMessage.includes('الشبكة') || errorMessage.includes('Network')) {
+        errorMessage = 'خطأ في الاتصال. تحقق من اتصالك بالإنترنت وحاول مجددًا.';
+      } else if (errorMessage.includes('timeout')) {
+        errorMessage = 'انتهت مهلة الاتصال. الخادم قد يكون مشغولًا. حاول بعد لحظات.';
+      } else if (errorMessage.includes('429')) {
+        errorMessage = 'تم تجاوز عدد محاولات الدخول. حاول بعد 15 دقيقة.';
+      } else if (errorMessage.includes('500') || errorMessage.includes('خطأ تقني')) {
+        errorMessage = 'حدث خطأ في الخادم. يرجى المحاولة لاحقًا.';
+      } else if (errorMessage.includes('نسيت') || errorMessage.includes('غير صحيح')) {
+        // Keep server message for invalid credentials
+      }
+
       setError(errorMessage);
       console.error('Login failed:', errorMessage);
       throw loginError;
