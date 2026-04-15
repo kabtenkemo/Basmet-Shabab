@@ -313,7 +313,7 @@ using (var scope = app.Services.CreateScope())
         try
         {
             var targetPresidentEmail = "president@basmet.local";
-            var targetPresidentPassword = "123";
+            var targetPresidentPassword = "Test123.";
             var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
             var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
 
