@@ -89,10 +89,6 @@ function getErrorMessage(error: unknown) {
       return 'ليس لديك صلاحية لتنفيذ هذا الطلب.';
     }
 
-    if (error.response?.status === 429) {
-      return 'تم تجاوز الحد المسموح به من الطلبات. حاول بعد قليل.';
-    }
-
     if (error.response?.status === 500) {
       return 'خطأ في الخادم. يرجى محاولة لاحقاً.';
     }

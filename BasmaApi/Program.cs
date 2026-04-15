@@ -1,6 +1,4 @@
 using System.Text;
-using System.Collections.Concurrent;
-using System.Threading.RateLimiting;
 using BasmaApi.Data;
 using BasmaApi.Middleware;
 using BasmaApi.Models;
@@ -8,7 +6,6 @@ using BasmaApi.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
-using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
@@ -87,52 +84,6 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<IPasswordService, BcryptPasswordService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
-
-// In-memory rate limiting for better concurrent user support (like Gym-system-Api)
-builder.Services.AddSingleton<ConcurrentDictionary<string, LoginAttemptState>>(_ => new());
-
-// FIX: Add Rate Limiting for login and auth endpoints
-builder.Services.AddRateLimiter(options =>
-{
-    options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
-    {
-        // FIX: Extract real client IP when behind proxy (Netlify, Cloudflare, etc.)
-        var remoteIp = GetClientIpAddress(context);
-        
-        // Strict limits for authentication endpoints
-        if (context.Request.Path.StartsWithSegments("/api/auth"))
-        {
-            return RateLimitPartition.GetFixedWindowLimiter(
-                partitionKey: remoteIp,
-                factory: _ => new FixedWindowRateLimiterOptions
-                {
-                    PermitLimit = 5,
-                    Window = TimeSpan.FromMinutes(15),
-                    QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-                });
-        }
-
-        // Standard limits for other endpoints
-        return RateLimitPartition.GetFixedWindowLimiter(
-            partitionKey: remoteIp,
-            factory: _ => new FixedWindowRateLimiterOptions
-            {
-                PermitLimit = 100,
-                Window = TimeSpan.FromMinutes(1),
-                QueueProcessingOrder = QueueProcessingOrder.OldestFirst
-            });
-    });
-    
-    options.OnRejected = async (context, cancellationToken) =>
-    {
-        context.HttpContext.Response.StatusCode = StatusCodes.Status429TooManyRequests;
-        context.HttpContext.Response.ContentType = "application/json";
-        await context.HttpContext.Response.WriteAsJsonAsync(new
-        {
-            message = "تم تجاوز حد الطلبات. يرجى المحاولة لاحقاً."
-        }, cancellationToken);
-    };
-});
 
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
@@ -707,8 +658,6 @@ if (!app.Environment.IsDevelopment())
 
 app.UseCors("ClientApp");
 
-app.UseRateLimiter();
-
 app.UseAuthentication();
 app.UseMiddleware<PasswordChangeRequiredMiddleware>();
 app.UseMiddleware<AuditRequestContextMiddleware>();
@@ -717,40 +666,3 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
-
-// Helper function to get real client IP when behind proxy
-static string GetClientIpAddress(HttpContext context)
-{
-    // Check X-Forwarded-For header (used by proxies like Netlify, Cloudflare, Nginx, etc.)
-    if (context.Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor))
-    {
-        var ips = forwardedFor.ToString().Split(',');
-        if (ips.Length > 0 && !string.IsNullOrWhiteSpace(ips[0]))
-        {
-            return ips[0].Trim();
-        }
-    }
-
-    // Check CF-Connecting-IP header (Cloudflare)
-    if (context.Request.Headers.TryGetValue("CF-Connecting-IP", out var cfConnectingIp))
-    {
-        var ip = cfConnectingIp.ToString().Trim();
-        if (!string.IsNullOrWhiteSpace(ip))
-        {
-            return ip;
-        }
-    }
-
-    // Check X-Real-IP header (Nginx and others)
-    if (context.Request.Headers.TryGetValue("X-Real-IP", out var xRealIp))
-    {
-        var ip = xRealIp.ToString().Trim();
-        if (!string.IsNullOrWhiteSpace(ip))
-        {
-            return ip;
-        }
-    }
-
-    // Fallback to direct connection IP
-    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
-}

@@ -420,8 +420,6 @@ export function AppProvider({ children }: PropsWithChildren) {
         errorMessage = 'خطأ في الاتصال. تحقق من اتصالك بالإنترنت وحاول مجددًا.';
       } else if (errorMessage.includes('timeout')) {
         errorMessage = 'انتهت مهلة الاتصال. الخادم قد يكون مشغولًا. حاول بعد لحظات.';
-      } else if (errorMessage.includes('429')) {
-        errorMessage = 'تم تجاوز عدد محاولات الدخول. حاول بعد 15 دقيقة.';
       } else if (errorMessage.includes('500') || errorMessage.includes('خطأ تقني')) {
         errorMessage = 'حدث خطأ في الخادم. يرجى المحاولة لاحقًا.';
       } else if (errorMessage.includes('نسيت') || errorMessage.includes('غير صحيح')) {

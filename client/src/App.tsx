@@ -289,7 +289,6 @@ function LoginView() {
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [capsLockDetected, setCapsLockDetected] = useState(false);
-  const [attemptCount, setAttemptCount] = useState(0);
 
   useEffect(() => {
     clearError();
@@ -309,13 +308,6 @@ function LoginView() {
       return {
         title: '❌ البيانات غير صحيحة',
         hint: 'تأكد من صحة البريد الإلكتروني وكلمة المرور. الحسابات حساسة لحالة الأحرف (Lowercase).'
-      };
-    }
-
-    if (errorMsg.includes('تم تجاوز')) {
-      return {
-        title: '⏱️ حاولت عدة مرات',
-        hint: 'تم تجاوز عدد محاولات الدخول. يرجى الانتظار 15 دقيقة ثم المحاولة مجددًا.'
       };
     }
 
@@ -398,17 +390,10 @@ function LoginView() {
       return;
     }
 
-    // Prevent too many attempts
-    if (attemptCount >= 5) {
-      setFormError('تم تجاوز عدد محاولات تسجيل الدخول. يرجى الانتظار قليلًا ثم المحاولة مرة أخرى.');
-      return;
-    }
-
     try {
       await loginUser(trimmedEmail, trimmedPassword);
     } catch {
-      // Increment attempt counter on failure
-      setAttemptCount((prev) => prev + 1);
+      // Errors are handled in AppContext
     }
   };
 
@@ -494,13 +479,7 @@ function LoginView() {
               );
             })()}
 
-            {attemptCount > 0 && attemptCount < 5 && (
-              <div className="rounded-2xl border border-slate-400/20 bg-slate-400/10 px-4 py-3 text-xs text-slate-300">
-                محاولات متبقية: {5 - attemptCount}
-              </div>
-            )}
-
-            <Button type="submit" className="w-full" disabled={loading || attemptCount >= 5}>
+            <Button type="submit" className="w-full" disabled={loading}>
               {loading ? (
                 <span className="inline-flex items-center gap-2">
                   <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" />
@@ -522,12 +501,6 @@ function LoginView() {
               </ul>
             </div>
 
-            {attemptCount > 0 && attemptCount < 5 && (
-              <div className="rounded-2xl border border-blue-400/20 bg-blue-400/10 px-4 py-3 text-xs text-blue-200 flex items-center gap-2">
-                <span className="text-lg">ℹ️</span>
-                <span>محاولات متبقية: <span className="font-bold">{5 - attemptCount}</span> - تنبيه: بعد 5 محاولات فاشلة سيتم حجب التسجيل مؤقتاً</span>
-              </div>
-            )}
           </div>
         </Card>
       </section>
