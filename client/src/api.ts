@@ -195,6 +195,10 @@ export async function adjustPoints(memberId: string, form: PointFormState) {
   return unwrap(api.post(`/api/members/${memberId}/points`, { amount: Number(form.amount), reason: form.reason }));
 }
 
+export async function resetMemberPassword(memberId: string) {
+  return unwrap(api.post(`/api/members/${memberId}/reset-password`, {}));
+}
+
 export async function getTasks() {
   return unwrap(api.get<TaskItem[]>('/api/tasks'));
 }

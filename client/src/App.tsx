@@ -845,7 +845,7 @@ function NewsPage() {
 }
 
 function MembersPage() {
-  const { members, search, createMember, changeRole, assignPermission, changePoints, canManageUsers, canCreateMembers, user } = useApp();
+  const { members, search, createMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, user } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedMemberId, setSelectedMemberId] = useState('');
@@ -1057,6 +1057,13 @@ function MembersPage() {
     setPointForm(emptyPoint);
   };
 
+  const resetMemberPassword = async () => {
+    if (!selectedMember) return;
+    if (window.confirm(`هل تريد فعلاً إعادة تعيين كلمة المرور للعضو "${selectedMember.fullName}" إلى Test123.؟`)) {
+      await resetPassword(selectedMember.memberId);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -1139,6 +1146,8 @@ function MembersPage() {
                 <Input value={pointForm.reason} onChange={(event) => setPointForm((current) => ({ ...current, reason: event.target.value }))} placeholder="مكافأة / خصم / نشاط" />
               </Field>
               <Button className="w-full" variant="secondary" onClick={() => void savePoints()} disabled={!canManageUsers}>تعديل النقاط</Button>
+
+              <Button className="w-full" variant="danger" onClick={() => void resetMemberPassword()} disabled={!canManageUsers}>إعادة تعيين كلمة المرور</Button>
             </div>
           ) : (
             <EmptyState title="اختر عضوًا" description="حدد عضوًا من الجدول لعرض أدوات الإدارة السريعة." />

@@ -19,6 +19,7 @@ import {
   grantPermission,
   grantRole,
   login,
+  resetMemberPassword,
   reviewComplaint,
   setStoredToken,
   updateTask
@@ -87,6 +88,7 @@ interface AppContextValue {
   changeRole: (memberId: string, role: string) => Promise<void>;
   assignPermission: (memberId: string, permissionKey: string) => Promise<void>;
   changePoints: (memberId: string, form: PointFormState) => Promise<void>;
+  resetPassword: (memberId: string) => Promise<void>;
   changePassword: (currentPassword: string, newPassword: string) => Promise<void>;
   createTaskItem: (form: TaskFormState) => Promise<void>;
   updateTaskItem: (id: string, form: TaskFormState) => Promise<void>;
@@ -525,6 +527,21 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [appendActivity, loadSession]);
 
+  const resetPassword = useCallback(async (memberId: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      await resetMemberPassword(memberId);
+      appendActivity('إعادة تعيين كلمة المرور', 'تم إعادة تعيين كلمة المرور إلى Test123.', 'success');
+      await loadSession();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'تعذر إعادة تعيين كلمة المرور');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession]);
+
   const createTaskItem = useCallback(async (form: TaskFormState) => {
     setLoading(true);
     setError('');
@@ -648,6 +665,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     changeRole,
     assignPermission,
     changePoints,
+    resetPassword,
     changePassword,
     createTaskItem,
     updateTaskItem,
@@ -681,6 +699,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     members,
     myComplaints,
     navigation,
+    resetPassword,
     reviewComplaintItem,
     search,
     section,
