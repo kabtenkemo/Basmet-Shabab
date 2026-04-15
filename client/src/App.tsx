@@ -301,6 +301,69 @@ function LoginView() {
     return emailRegex.test(value.trim());
   };
 
+  const getErrorDetails = (errorMsg: string): { title: string; hint: string } => {
+    // Parse error messages to provide helpful hints
+    if (!errorMsg) return { title: '', hint: '' };
+
+    if (errorMsg.includes('غير صحيح') || errorMsg.includes('غير موجود')) {
+      return {
+        title: '❌ البيانات غير صحيحة',
+        hint: 'تأكد من صحة البريد الإلكتروني وكلمة المرور. الحسابات حساسة لحالة الأحرف (Lowercase).'
+      };
+    }
+
+    if (errorMsg.includes('تم تجاوز')) {
+      return {
+        title: '⏱️ حاولت عدة مرات',
+        hint: 'تم تجاوز عدد محاولات الدخول. يرجى الانتظار 15 دقيقة ثم المحاولة مجددًا.'
+      };
+    }
+
+    if (errorMsg.includes('الاتصال') || errorMsg.includes('الشبكة')) {
+      return {
+        title: '🌐 مشكلة في الاتصال',
+        hint: 'تحقق من اتصالك بالإنترنت. جاري المحاولة مرة أخرى تلقائياً...'
+      };
+    }
+
+    if (errorMsg.includes('مهلة') || errorMsg.includes('timeout')) {
+      return {
+        title: '⏳ الخادم بطيء',
+        hint: 'الخادم يستغرق وقتاً أطول من المتوقع. حاول بعد قليل.'
+      };
+    }
+
+    if (errorMsg.includes('خطأ في الخادم')) {
+      return {
+        title: '⚠️ خطأ في الخادم',
+        hint: 'حدث خطأ تقني. يرجى محاولة لاحقاً أو التواصل مع الدعم الفني.'
+      };
+    }
+
+    if (errorMsg.includes('مطلوبة') || errorMsg.includes('مطلوبان')) {
+      return {
+        title: '📝 حقول ناقصة',
+        hint: 'الرجاء ملء البريد الإلكتروني وكلمة المرور.'
+      };
+    }
+
+    if (errorMsg.includes('صيغة') || errorMsg.includes('صحيح')) {
+      return {
+        title: '✉️ البريد غير صحيح',
+        hint: 'استخدم البريد الإلكتروني الكامل (مثال: president@basmet.local)'
+      };
+    }
+
+    if (errorMsg.includes('قصير') || errorMsg.includes('6 أحرف')) {
+      return {
+        title: '🔐 كلمة السر ضعيفة',
+        hint: 'كلمة السر يجب أن تكون 6 أحرف على الأقل.'
+      };
+    }
+
+    return { title: '❌ خطأ', hint: errorMsg };
+  };
+
   const handlePasswordKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
     // Detect CAPS LOCK
     const capsLockOn = event.getModifierState('CapsLock');
@@ -392,7 +455,7 @@ function LoginView() {
       <section className="flex items-center justify-center px-6 py-10 sm:px-10 lg:px-12">
         <Card title={loginTitle()} subtitle="Authentication" className="w-full max-w-xl">
           <form className="space-y-4" onSubmit={submit}>
-            <Field label="البريد الإلكتروني" hint="مثال: president@basmet.local">
+            <Field label="البريد الإلكتروني" hint="مثال: president@basmet.local - Lowercase فقط">
               <Input
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -403,7 +466,7 @@ function LoginView() {
               />
             </Field>
 
-            <Field label="كلمة المرور">
+            <Field label="كلمة المرور" hint="6 أحرف على الأقل - حساسة لحالة الأحرف">
               <Input
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -421,11 +484,15 @@ function LoginView() {
               </div>
             )}
 
-            {(formError || error) && (
-              <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">
-                {formError || error}
-              </div>
-            )}
+            {(formError || error) && (() => {
+              const { title, hint } = getErrorDetails(formError || error);
+              return (
+                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 space-y-2">
+                  <div className="text-sm font-semibold text-rose-200">{title}</div>
+                  <div className="text-xs text-rose-100/80">{hint}</div>
+                </div>
+              );
+            })()}
 
             {attemptCount > 0 && attemptCount < 5 && (
               <div className="rounded-2xl border border-slate-400/20 bg-slate-400/10 px-4 py-3 text-xs text-slate-300">
@@ -445,13 +512,22 @@ function LoginView() {
             </Button>
           </form>
 
-          <div className="mt-6 rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
-            <p className="font-semibold text-white mb-2">ملاحظات مهمة:</p>
-            <ul className="list-inside space-y-1">
-              <li>• التسجيل الخارجي مغلق - الحسابات تُنشأ من داخل النظام فقط</li>
-              <li>• البريد الإلكتروني: lowercase فقط (مثال: president@basmet.local)</li>
-              <li>• إذا نسيت كلمة المرور، تواصل مع المسؤول</li>
-            </ul>
+          <div className="mt-6 space-y-3">
+            <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
+              <p className="font-semibold text-white mb-2">ملاحظات مهمة:</p>
+              <ul className="list-inside space-y-1">
+                <li>• التسجيل الخارجي مغلق - الحسابات تُنشأ من داخل النظام فقط</li>
+                <li>• البريد الإلكتروني: lowercase فقط (مثال: president@basmet.local)</li>
+                <li>• إذا نسيت كلمة المرور، تواصل مع المسؤول</li>
+              </ul>
+            </div>
+
+            {attemptCount > 0 && attemptCount < 5 && (
+              <div className="rounded-2xl border border-blue-400/20 bg-blue-400/10 px-4 py-3 text-xs text-blue-200 flex items-center gap-2">
+                <span className="text-lg">ℹ️</span>
+                <span>محاولات متبقية: <span className="font-bold">{5 - attemptCount}</span> - تنبيه: بعد 5 محاولات فاشلة سيتم حجب التسجيل مؤقتاً</span>
+              </div>
+            )}
           </div>
         </Card>
       </section>
