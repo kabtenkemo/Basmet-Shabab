@@ -289,10 +289,19 @@ function LoginView() {
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [capsLockDetected, setCapsLockDetected] = useState(false);
+  const [showPassword, setShowPassword] = useState(false);
+  const [rememberEmail, setRememberEmail] = useState(true);
 
   useEffect(() => {
     clearError();
   }, [clearError]);
+
+  useEffect(() => {
+    const rememberedEmail = localStorage.getItem('basma-remembered-email') || '';
+    if (rememberedEmail) {
+      setEmail(rememberedEmail);
+    }
+  }, []);
 
   const validateEmail = (value: string): boolean => {
     // Basic email validation
@@ -356,6 +365,42 @@ function LoginView() {
     return { title: '❌ خطأ', hint: errorMsg };
   };
 
+  const getLoginFeedback = (message: string): { title: string; hint: string; tone: 'danger' | 'warning' } => {
+    if (!message) {
+      return { title: '', hint: '', tone: 'danger' };
+    }
+
+    if (message.includes('غير صحيحة') || message.includes('غير صحيح') || message.includes('غير موجود')) {
+      return {
+        title: 'تعذر تسجيل الدخول',
+        hint: 'تأكد من البريد الإلكتروني وكلمة المرور، مع الانتباه إلى حالة الأحرف.',
+        tone: 'danger'
+      };
+    }
+
+    if (message.includes('الخادم') || message.includes('الاتصال') || message.includes('الشبكة') || message.includes('مهلة')) {
+      return {
+        title: 'مشكلة في الاتصال بالخادم',
+        hint: 'الخادم أو رابط الـ API غير متاح حاليًا. حاول مرة أخرى بعد لحظات.',
+        tone: 'warning'
+      };
+    }
+
+    if (message.includes('مطلوبة') || message.includes('مطلوبان') || message.includes('صيغة')) {
+      return {
+        title: 'راجِع بيانات الدخول',
+        hint: message,
+        tone: 'warning'
+      };
+    }
+
+    return {
+      title: 'حدث خطأ أثناء تسجيل الدخول',
+      hint: message,
+      tone: 'danger'
+    };
+  };
+
   const handlePasswordKeyPress = (event: React.KeyboardEvent<HTMLInputElement>) => {
     // Detect CAPS LOCK
     const capsLockOn = event.getModifierState('CapsLock');
@@ -391,6 +436,12 @@ function LoginView() {
     }
 
     try {
+      if (rememberEmail) {
+        localStorage.setItem('basma-remembered-email', trimmedEmail.toLowerCase());
+      } else {
+        localStorage.removeItem('basma-remembered-email');
+      }
+
       await loginUser(trimmedEmail, trimmedPassword);
     } catch {
       // Errors are handled in AppContext
@@ -399,7 +450,7 @@ function LoginView() {
 
   const warningMessages = [];
   if (capsLockDetected) {
-    warningMessages.push('⚠️ Caps Lock مفعّل - انتبه من حالة الأحرف');
+    warningMessages.push('Caps Lock مفعّل، انتبه إلى حالة الأحرف.');
   }
 
   return (
@@ -443,7 +494,11 @@ function LoginView() {
             <Field label="البريد الإلكتروني" hint="مثال: president@basmet.local - Lowercase فقط">
               <Input
                 value={email}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                  if (formError) setFormError('');
+                  if (error) clearError();
+                }}
                 type="email"
                 placeholder="president@basmet.local"
                 disabled={loading}
@@ -454,14 +509,38 @@ function LoginView() {
             <Field label="كلمة المرور" hint="6 أحرف على الأقل - حساسة لحالة الأحرف">
               <Input
                 value={password}
-                onChange={(event) => setPassword(event.target.value)}
+                onChange={(event) => {
+                  setPassword(event.target.value);
+                  if (formError) setFormError('');
+                  if (error) clearError();
+                }}
                 onKeyDown={handlePasswordKeyPress}
-                type="password"
+                type={showPassword ? 'text' : 'password'}
                 placeholder="••••••••"
                 disabled={loading}
                 autoComplete="current-password"
               />
             </Field>
+
+            <div className="flex flex-wrap items-center justify-between gap-3 text-sm text-slate-300">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={rememberEmail}
+                  onChange={(event) => setRememberEmail(event.target.checked)}
+                  disabled={loading}
+                />
+                <span>تذكّر البريد الإلكتروني</span>
+              </label>
+              <button
+                type="button"
+                className="rounded-xl border border-white/10 px-3 py-2 text-sm text-slate-200 transition hover:bg-white/5"
+                onClick={() => setShowPassword((current) => !current)}
+                disabled={loading}
+              >
+                {showPassword ? 'إخفاء كلمة المرور' : 'إظهار كلمة المرور'}
+              </button>
+            </div>
 
             {warningMessages.length > 0 && (
               <div className="rounded-2xl border border-amber-400/20 bg-amber-400/10 px-4 py-3 text-sm text-amber-200">
@@ -470,11 +549,11 @@ function LoginView() {
             )}
 
             {(formError || error) && (() => {
-              const { title, hint } = getErrorDetails(formError || error);
+              const { title, hint, tone } = getLoginFeedback(formError || error);
               return (
-                <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 space-y-2">
-                  <div className="text-sm font-semibold text-rose-200">{title}</div>
-                  <div className="text-xs text-rose-100/80">{hint}</div>
+                <div className={`rounded-2xl px-4 py-3 space-y-2 ${tone === 'warning' ? 'border border-amber-400/20 bg-amber-400/10' : 'border border-rose-400/20 bg-rose-400/10'}`}>
+                  <div className={`text-sm font-semibold ${tone === 'warning' ? 'text-amber-200' : 'text-rose-200'}`}>{title}</div>
+                  <div className={`text-xs ${tone === 'warning' ? 'text-amber-100/80' : 'text-rose-100/80'}`}>{hint}</div>
                 </div>
               );
             })()}

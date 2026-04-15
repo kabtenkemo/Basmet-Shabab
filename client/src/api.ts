@@ -1,4 +1,4 @@
-import axios from 'axios';
+import axios, { AxiosHeaders, type AxiosRequestConfig, type AxiosResponse } from 'axios';
 import type {
   AuditLogFilters,
   AuditLogPage,
@@ -19,7 +19,6 @@ import type {
   LeaderboardEntry,
   MemberAdminItem,
   MemberCreateFormState,
-  MemberInfo,
   PointFormState,
   TaskFormState,
   TaskItem,
@@ -27,40 +26,67 @@ import type {
   SuggestionFormState
 } from './types';
 
-const baseURL = '';
+const productionApiBaseUrl = 'https://basmet-shabab.runasp.net';
 const authTokenKey = 'team-management-token';
 
+function resolveBaseUrl() {
+  const env = import.meta.env as Record<string, string | undefined>;
+  const configured = env.VITE_API_BASE_URL?.trim();
+  if (configured) {
+    return configured.replace(/\/$/, '');
+  }
+
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname;
+    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return '';
+    }
+  }
+
+  return productionApiBaseUrl;
+}
+
+function attachInterceptors(instance: ReturnType<typeof axios.create>) {
+  instance.interceptors.request.use((config) => {
+    const token = localStorage.getItem(authTokenKey);
+    const headers = AxiosHeaders.from(config.headers ?? {});
+
+    headers.set('Content-Type', 'application/json');
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+
+    config.headers = headers;
+    return config;
+  });
+
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      if (error.response?.status === 401) {
+        localStorage.removeItem(authTokenKey);
+        window.location.href = '/';
+      }
+
+      return Promise.reject(error);
+    }
+  );
+}
+
+const apiBaseUrl = resolveBaseUrl();
+
 const api = axios.create({
-  baseURL,
-  headers: {
-    'Content-Type': 'application/json'
-  },
+  baseURL: apiBaseUrl,
   timeout: 20000
 });
 
-api.interceptors.request.use((config) => {
-  const token = localStorage.getItem(authTokenKey);
-  if (token) {
-    config.headers = config.headers ?? {};
-    config.headers.Authorization = `Bearer ${token}`;
-  }
-
-  return config;
+const directApi = axios.create({
+  baseURL: productionApiBaseUrl,
+  timeout: 20000
 });
 
-// Response interceptor to handle errors globally
-// FIX: Automatically clear token on 401 to prevent stale sessions
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    // Handle 401 - clear token and require login
-    if (error.response?.status === 401) {
-      localStorage.removeItem(authTokenKey);
-      window.location.href = '/';
-    }
-    return Promise.reject(error);
-  }
-);
+attachInterceptors(api);
+attachInterceptors(directApi);
 
 function getErrorMessage(error: unknown) {
   if (axios.isAxiosError(error)) {
@@ -82,42 +108,86 @@ function getErrorMessage(error: unknown) {
     }
 
     if (error.response?.status === 401) {
-      return 'انتهت جلستك. يرجى تسجيل الدخول مرة أخرى.';
+      return 'البريد الإلكتروني أو كلمة المرور غير صحيحة.';
     }
 
     if (error.response?.status === 403) {
       return 'ليس لديك صلاحية لتنفيذ هذا الطلب.';
     }
 
+    if (error.response?.status === 404) {
+      return 'الخدمة المطلوبة غير متاحة حاليًا. تحقق من إعدادات الربط بين الموقع والخادم.';
+    }
+
     if (error.response?.status === 500) {
-      return 'خطأ في الخادم. يرجى محاولة لاحقاً.';
+      return 'حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقًا.';
     }
 
-    // Network errors
     if (error.code === 'ECONNABORTED') {
-      return 'انقطع الاتصال. يرجى التحقق من اتصال الإنترنت.';
+      return 'انتهت مهلة الاتصال بالخادم. حاول مرة أخرى بعد لحظات.';
     }
 
-    if (error.code === 'ENOTFOUND' || error.code === 'NETWORK_ERROR' || error.code === 'ECONNREFUSED') {
-      return 'لا يمكن الوصول للخادم. تحقق من اتصالك بالإنترنت.';
-    }
-
-    // Timeout
-    if (error.code === 'ETIMEDOUT' || error.code === 'ECONNRESET') {
-      return 'انتهت مهلة الاتصال. الخادم قد يكون مشغولاً.';
+    if (
+      error.code === 'ERR_NETWORK'
+      || error.code === 'ENOTFOUND'
+      || error.code === 'NETWORK_ERROR'
+      || error.code === 'ECONNREFUSED'
+      || error.code === 'ECONNRESET'
+      || error.message?.toLowerCase().includes('network')
+    ) {
+      return 'تعذر الوصول إلى الخادم. تحقق من اتصال الإنترنت أو إعدادات نشر الـ API.';
     }
   }
 
-  return 'تعذر تنفيذ الطلب';
+  return 'تعذر تنفيذ الطلب. حاول مرة أخرى.';
 }
 
-async function unwrap<T>(operation: Promise<{ data: T }>): Promise<T> {
+function shouldRetryWithDirectApi(error: unknown) {
+  if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  if (apiBaseUrl === productionApiBaseUrl) {
+    return false;
+  }
+
+  if (error.response?.status === 404) {
+    return true;
+  }
+
+  return !error.response && (
+    error.code === 'ERR_NETWORK'
+    || error.code === 'ECONNREFUSED'
+    || error.code === 'ENOTFOUND'
+    || error.code === 'ECONNRESET'
+    || error.message?.toLowerCase().includes('network')
+  );
+}
+
+async function unwrap<T>(operation: Promise<AxiosResponse<T>>, fallbackOperation?: (() => Promise<AxiosResponse<T>>) | null): Promise<T> {
   try {
     const response = await operation;
     return response.data;
   } catch (error) {
+    if (fallbackOperation && shouldRetryWithDirectApi(error)) {
+      try {
+        const fallbackResponse = await fallbackOperation();
+        return fallbackResponse.data;
+      } catch (fallbackError) {
+        throw new Error(getErrorMessage(fallbackError));
+      }
+    }
+
     throw new Error(getErrorMessage(error));
   }
+}
+
+function request<T>(config: AxiosRequestConfig, allowDirectFallback = true) {
+  const fallbackOperation = allowDirectFallback
+    ? () => directApi.request<T>({ ...config, baseURL: productionApiBaseUrl })
+    : null;
+
+  return unwrap(api.request<T>(config), fallbackOperation);
 }
 
 export function setStoredToken(token: string | null) {
@@ -133,126 +203,140 @@ export function getStoredToken() {
 }
 
 export async function login(email: string, password: string) {
-  // Never log passwords or sensitive data in production
-  const response = await unwrap(api.post<AuthResponse>('/api/auth/login', { email: email.trim(), password: password.trim() }));
-  return response;
+  return request<AuthResponse>({
+    method: 'POST',
+    url: '/api/auth/login',
+    data: { email: email.trim(), password: password.trim() }
+  });
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {
-  return unwrap(api.post('/api/auth/change-password', { currentPassword, newPassword }));
+  return request({ method: 'POST', url: '/api/auth/change-password', data: { currentPassword, newPassword } });
 }
 
 export async function getMe() {
-  return unwrap(api.get<DashboardMe>('/api/members/me'));
+  return request<DashboardMe>({ method: 'GET', url: '/api/members/me' });
 }
 
 export async function getDashboard() {
-  return unwrap(api.get<DashboardOverview>('/api/dashboard/overview'));
+  return request<DashboardOverview>({ method: 'GET', url: '/api/dashboard/overview' });
 }
 
 export async function getLeaderboard() {
-  return unwrap(api.get<LeaderboardEntry[]>('/api/dashboard/leaderboard'));
+  return request<LeaderboardEntry[]>({ method: 'GET', url: '/api/dashboard/leaderboard' });
 }
 
 export async function getMembers() {
-  return unwrap(api.get<MemberAdminItem[]>('/api/members'));
+  return request<MemberAdminItem[]>({ method: 'GET', url: '/api/members' });
 }
 
 export async function createMember(form: MemberCreateFormState) {
-  return unwrap(api.post<MemberAdminItem>('/api/members', {
-    ...form,
-    governorateId: form.governorateId || null,
-    committeeId: form.committeeId || null,
-    birthDate: form.birthDate || null
-  }));
+  return request<MemberAdminItem>({
+    method: 'POST',
+    url: '/api/members',
+    data: {
+      ...form,
+      governorateId: form.governorateId || null,
+      committeeId: form.committeeId || null,
+      birthDate: form.birthDate || null
+    }
+  });
 }
 
 export async function getGovernorates() {
-  return unwrap(api.get<GovernorateOption[]>('/api/governorates'));
+  return request<GovernorateOption[]>({ method: 'GET', url: '/api/governorates' });
 }
 
 export async function getGovernorateCommittees(governorateId: string) {
-  return unwrap(api.get<CommitteeOption[]>(`/api/governorates/${governorateId}/committees`));
+  return request<CommitteeOption[]>({ method: 'GET', url: `/api/governorates/${governorateId}/committees` });
 }
 
 export async function createCommittee(governorateId: string, form: CommitteeCreateFormState) {
-  return unwrap(api.post<CommitteeOption>(`/api/governorates/${governorateId}/committees`, form));
+  return request<CommitteeOption>({ method: 'POST', url: `/api/governorates/${governorateId}/committees`, data: form });
 }
 
 export async function grantRole(memberId: string, role: string) {
-  return unwrap(api.post(`/api/members/${memberId}/role`, { role }));
+  return request({ method: 'POST', url: `/api/members/${memberId}/role`, data: { role } });
 }
 
 export async function grantPermission(memberId: string, permissionKey: string) {
-  return unwrap(api.post(`/api/members/${memberId}/permissions`, { permissionKey }));
+  return request({ method: 'POST', url: `/api/members/${memberId}/permissions`, data: { permissionKey } });
 }
 
 export async function adjustPoints(memberId: string, form: PointFormState) {
-  return unwrap(api.post(`/api/members/${memberId}/points`, { amount: Number(form.amount), reason: form.reason }));
+  return request({ method: 'POST', url: `/api/members/${memberId}/points`, data: { amount: Number(form.amount), reason: form.reason } });
 }
 
 export async function resetMemberPassword(memberId: string) {
-  return unwrap(api.post(`/api/members/${memberId}/reset-password`, {}));
+  return request({ method: 'POST', url: `/api/members/${memberId}/reset-password`, data: {} });
 }
 
 export async function getTasks() {
-  return unwrap(api.get<TaskItem[]>('/api/tasks'));
+  return request<TaskItem[]>({ method: 'GET', url: '/api/tasks' });
 }
 
 export async function createTask(task: TaskFormState) {
-  return unwrap(api.post<TaskItem>('/api/tasks', {
-    title: task.title,
-    description: task.description || null,
-    dueDate: task.dueDate || null,
-    audienceType: task.audienceType,
-    targetRoles: task.audienceType === 'Roles' ? task.targetRoles : [],
-    targetMemberIds: task.audienceType === 'Members' ? task.targetMemberIds : [],
-    isCompleted: task.isCompleted
-  }));
+  return request<TaskItem>({
+    method: 'POST',
+    url: '/api/tasks',
+    data: {
+      title: task.title,
+      description: task.description || null,
+      dueDate: task.dueDate || null,
+      audienceType: task.audienceType,
+      targetRoles: task.audienceType === 'Roles' ? task.targetRoles : [],
+      targetMemberIds: task.audienceType === 'Members' ? task.targetMemberIds : [],
+      isCompleted: task.isCompleted
+    }
+  });
 }
 
 export async function updateTask(id: string, task: TaskFormState) {
-  return unwrap(api.put<TaskItem>(`/api/tasks/${id}`, {
-    title: task.title,
-    description: task.description || null,
-    dueDate: task.dueDate || null,
-    audienceType: task.audienceType,
-    targetRoles: task.audienceType === 'Roles' ? task.targetRoles : [],
-    targetMemberIds: task.audienceType === 'Members' ? task.targetMemberIds : [],
-    isCompleted: task.isCompleted
-  }));
+  return request<TaskItem>({
+    method: 'PUT',
+    url: `/api/tasks/${id}`,
+    data: {
+      title: task.title,
+      description: task.description || null,
+      dueDate: task.dueDate || null,
+      audienceType: task.audienceType,
+      targetRoles: task.audienceType === 'Roles' ? task.targetRoles : [],
+      targetMemberIds: task.audienceType === 'Members' ? task.targetMemberIds : [],
+      isCompleted: task.isCompleted
+    }
+  });
 }
 
 export async function deleteTask(id: string) {
-  return unwrap(api.delete(`/api/tasks/${id}`));
+  return request({ method: 'DELETE', url: `/api/tasks/${id}` });
 }
 
 export async function getMyComplaints() {
-  return unwrap(api.get<ComplaintItem[]>('/api/complaints/mine'));
+  return request<ComplaintItem[]>({ method: 'GET', url: '/api/complaints/mine' });
 }
 
 export async function getComplaints() {
-  return unwrap(api.get<ComplaintItem[]>('/api/complaints'));
+  return request<ComplaintItem[]>({ method: 'GET', url: '/api/complaints' });
 }
 
 export async function getComplaint(id: string) {
-  return unwrap(api.get<ComplaintDetail>(`/api/complaints/${id}`));
+  return request<ComplaintDetail>({ method: 'GET', url: `/api/complaints/${id}` });
 }
 
 export async function createComplaint(form: ComplaintFormState) {
-  return unwrap(api.post<ComplaintItem>('/api/complaints', form));
+  return request<ComplaintItem>({ method: 'POST', url: '/api/complaints', data: form });
 }
 
 export async function reviewComplaint(id: string, review: ComplaintReviewState) {
-  return unwrap(api.put(`/api/complaints/${id}`, review));
+  return request({ method: 'PUT', url: `/api/complaints/${id}`, data: review });
 }
 
 export async function commentComplaint(id: string, form: ComplaintCommentState) {
-  return unwrap(api.post(`/api/complaints/${id}/comments`, form));
+  return request({ method: 'POST', url: `/api/complaints/${id}/comments`, data: form });
 }
 
 export async function escalateComplaint(id: string, form: ComplaintEscalateState) {
-  return unwrap(api.post(`/api/complaints/${id}/escalate`, form));
+  return request({ method: 'POST', url: `/api/complaints/${id}/escalate`, data: form });
 }
 
 export async function getAuditLogs(filters: AuditLogFilters) {
@@ -264,15 +348,15 @@ export async function getAuditLogs(filters: AuditLogFilters) {
     }
   });
 
-  return unwrap(api.get<AuditLogPage>(`/api/auditlogs?${params.toString()}`));
+  return request<AuditLogPage>({ method: 'GET', url: `/api/auditlogs?${params.toString()}` });
 }
 
 export async function getNews() {
-  return unwrap(api.get<NewsItem[]>('/api/news'));
+  return request<NewsItem[]>({ method: 'GET', url: '/api/news' });
 }
 
 export async function createNews(form: NewsCreateState) {
-  return unwrap(api.post<NewsItem>('/api/news', form));
+  return request<NewsItem>({ method: 'POST', url: '/api/news', data: form });
 }
 
 export async function getSuggestions(status?: string) {
@@ -280,13 +364,14 @@ export async function getSuggestions(status?: string) {
   if (status) {
     params.set('status', status);
   }
-  return unwrap(api.get<SuggestionItem[]>(`/api/suggestions${params.toString() ? '?' + params.toString() : ''}`));
+
+  return request<SuggestionItem[]>({ method: 'GET', url: `/api/suggestions${params.toString() ? `?${params.toString()}` : ''}` });
 }
 
 export async function createSuggestion(form: SuggestionFormState) {
-  return unwrap(api.post<SuggestionItem>('/api/suggestions', form));
+  return request<SuggestionItem>({ method: 'POST', url: '/api/suggestions', data: form });
 }
 
 export async function voteSuggestion(id: string, isAcceptance: boolean) {
-  return unwrap(api.post<SuggestionItem>(`/api/suggestions/${id}/vote`, { isAcceptance }));
+  return request<SuggestionItem>({ method: 'POST', url: `/api/suggestions/${id}/vote`, data: { isAcceptance } });
 }

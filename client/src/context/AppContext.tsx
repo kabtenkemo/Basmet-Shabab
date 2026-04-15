@@ -358,7 +358,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     try {
       // Trim and validate inputs
       const trimmedEmail = email.trim().toLowerCase();
-      const trimmedPassword = password.trim();
+      const trimmedPassword = password;
 
       if (!trimmedEmail || !trimmedPassword) {
         throw new Error('البريد الإلكتروني وكلمة المرور مطلوبان.');
@@ -370,42 +370,25 @@ export function AppProvider({ children }: PropsWithChildren) {
         throw new Error('صيغة البريد الإلكتروني غير صحيحة.');
       }
 
-      let response;
-      let retries = 2;
-      
-      while (retries >= 0) {
-        try {
-          response = await login(trimmedEmail, trimmedPassword);
-          break;
-        } catch (err) {
-          if (retries > 0 && err instanceof Error && 
-              (err.message.includes('Network') || err.message.includes('timeout'))) {
-            retries--;
-            // Wait before retry
-            await new Promise(resolve => setTimeout(resolve, 500));
-          } else {
-            throw err;
-          }
-        }
-      }
+      const response = await login(trimmedEmail, trimmedPassword);
 
       setUser({
-        id: response!.memberId,
-        fullName: response!.fullName,
-        email: response!.email.toLowerCase(),
-        role: response!.role,
-        nationalId: response!.nationalId,
-        birthDate: response!.birthDate,
-        governorName: response!.governorName,
-        committeeName: response!.committeeName,
-        points: response!.points,
-        permissions: response!.permissions,
-        mustChangePassword: response!.mustChangePassword
+        id: response.memberId,
+        fullName: response.fullName,
+        email: response.email.toLowerCase(),
+        role: response.role,
+        nationalId: response.nationalId,
+        birthDate: response.birthDate,
+        governorName: response.governorName,
+        committeeName: response.committeeName,
+        points: response.points,
+        permissions: response.permissions,
+        mustChangePassword: response.mustChangePassword
       });
-      setToken(response!.token);
-      setStoredToken(response!.token);
-      setActivityLogs((current) => [createLog('تسجيل الدخول', `تم تسجيل دخول ${response!.fullName}`, 'success'), ...current]);
-      void loadSession(response!.token);
+      setToken(response.token);
+      setStoredToken(response.token);
+      setActivityLogs((current) => [createLog('تسجيل الدخول', `تم تسجيل دخول ${response.fullName}`, 'success'), ...current]);
+      void loadSession(response.token);
     } catch (loginError) {
       let errorMessage = 'تعذر تنفيذ عملية تسجيل الدخول';
       
