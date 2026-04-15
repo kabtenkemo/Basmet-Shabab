@@ -4,6 +4,7 @@ using BasmaApi.Models;
 using BasmaApi.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Collections.Concurrent;
 
 namespace BasmaApi.Controllers;
 
@@ -11,19 +12,110 @@ namespace BasmaApi.Controllers;
 [Route("api/[controller]")]
 public sealed class AuthController : ControllerBase
 {
+    private const int MaxAttemptsPerMinute = 10;
+    private static readonly TimeSpan LoginWindow = TimeSpan.FromMinutes(1);
+    
     private readonly AppDbContext _dbContext;
     private readonly IPasswordService _passwordService;
     private readonly IAuditLogService _auditLogService;
     private readonly ITokenService _tokenService;
     private readonly ILogger<AuthController>? _logger;
+    private readonly ConcurrentDictionary<string, LoginAttemptState> _loginAttempts;
 
-    public AuthController(AppDbContext dbContext, IPasswordService passwordService, IAuditLogService auditLogService, ITokenService tokenService, ILogger<AuthController>? logger = null)
+    public AuthController(
+        AppDbContext dbContext, 
+        IPasswordService passwordService, 
+        IAuditLogService auditLogService, 
+        ITokenService tokenService, 
+        ILogger<AuthController>? logger = null,
+        ConcurrentDictionary<string, LoginAttemptState>? loginAttempts = null)
     {
         _dbContext = dbContext;
         _passwordService = passwordService;
         _auditLogService = auditLogService;
         _tokenService = tokenService;
         _logger = logger;
+        _loginAttempts = loginAttempts ?? new();
+    }
+
+    private string BuildLoginAttemptKey(string email)
+    {
+        var ip = GetClientIpAddress();
+        return $"{ip}:{email.ToLowerInvariant()}";
+    }
+
+    private bool IsTemporarilyBlocked(string key)
+    {
+        if (!_loginAttempts.TryGetValue(key, out var state))
+            return false;
+
+        if (DateTime.UtcNow - state.WindowStartUtc > LoginWindow)
+        {
+            _loginAttempts.TryRemove(key, out _);
+            return false;
+        }
+
+        return state.Count >= MaxAttemptsPerMinute;
+    }
+
+    private void RegisterFailedAttempt(string key)
+    {
+        _loginAttempts.AddOrUpdate(
+            key,
+            _ => new LoginAttemptState { Count = 1, WindowStartUtc = DateTime.UtcNow },
+            (_, state) =>
+            {
+                if (DateTime.UtcNow - state.WindowStartUtc > LoginWindow)
+                {
+                    state.Count = 1;
+                    state.WindowStartUtc = DateTime.UtcNow;
+                    return state;
+                }
+
+                state.Count++;
+                return state;
+            });
+    }
+
+    private void ResetAttempts(string key)
+    {
+        _loginAttempts.TryRemove(key, out _);
+    }
+
+    private string GetClientIpAddress()
+    {
+        // Check X-Forwarded-For header (used by proxies like Netlify, Cloudflare, Nginx, etc.)
+        if (HttpContext.Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor))
+        {
+            var ips = forwardedFor.ToString().Split(',');
+            if (ips.Length > 0 && !string.IsNullOrWhiteSpace(ips[0]))
+            {
+                return ips[0].Trim();
+            }
+        }
+
+        // Check CF-Connecting-IP header (Cloudflare)
+        if (HttpContext.Request.Headers.TryGetValue("CF-Connecting-IP", out var cfConnectingIp))
+        {
+            var ip = cfConnectingIp.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(ip))
+            {
+                return ip;
+            }
+        }
+
+        // Check X-Real-IP header (Nginx and others)
+        if (HttpContext.Request.Headers.TryGetValue("X-Real-IP", out var xRealIp))
+        {
+            var ip = xRealIp.ToString().Trim();
+            if (!string.IsNullOrWhiteSpace(ip))
+            {
+                return ip;
+            }
+        }
+
+        // Fallback to direct connection IP
+        return HttpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
     }
 
     [HttpPost("register")]
@@ -36,9 +128,7 @@ public sealed class AuthController : ControllerBase
     public async Task<ActionResult<AuthResponse>> Login([FromBody] LoginRequest request, CancellationToken cancellationToken)
     {
         // FIX: Normalize email to lowercase for case-insensitive search
-        // This prevents login failures when user enters "PRESIDENT@BASMET.LOCAL" instead of "president@basmet.local"
         var email = request.Email?.Trim().ToLowerInvariant() ?? string.Empty;
-        var currentIpAddress = HttpContext.Connection.RemoteIpAddress?.ToString() ?? "Unknown";
         
         // Validate input
         if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.Password))
@@ -46,20 +136,13 @@ public sealed class AuthController : ControllerBase
             return Unauthorized(new { message = "البريد الإلكتروني وكلمة المرور مطلوبان." });
         }
 
-        // Rate limiting: check for recent failed attempts
-        var recentFailedAttempts = await _dbContext.AuditLogs
-            .AsNoTracking()
-            .Where(log =>
-                log.ActionType == "Login_Failed" &&
-                log.IPAddress == currentIpAddress &&
-                log.TimestampUtc > DateTime.UtcNow.AddMinutes(-15))
-            .CountAsync(cancellationToken);
-
-        if (recentFailedAttempts >= 10)
+        // Check in-memory rate limiting (fast, supports concurrent users)
+        var attemptKey = BuildLoginAttemptKey(email);
+        if (IsTemporarilyBlocked(attemptKey))
         {
-            await LogFailedLogin(email, currentIpAddress, "متعددة محاولات فاشلة من نفس الـ IP", cancellationToken);
+            await LogFailedLogin(email, GetClientIpAddress(), "تجاوز حد المحاولات", cancellationToken);
             return StatusCode(StatusCodes.Status429TooManyRequests,
-                new { message = "تم تجاوز عدد محاولات الدخول المسموحة. يرجى المحاولة بعد 15 دقيقة." });
+                new { message = "تم تجاوز عدد محاولات الدخول. حاول مرة أخرى بعد دقيقة." });
         }
         
         var member = await _dbContext.Members
@@ -68,14 +151,16 @@ public sealed class AuthController : ControllerBase
         
         if (member is null)
         {
-            await LogFailedLogin(email, currentIpAddress, "بريد إلكتروني غير موجود", cancellationToken);
+            RegisterFailedAttempt(attemptKey);
+            await LogFailedLogin(email, GetClientIpAddress(), "بريد إلكتروني غير موجود", cancellationToken);
             return Unauthorized(new { message = "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
         }
 
         // Validate that password hash exists
         if (string.IsNullOrWhiteSpace(member.PasswordHash))
         {
-            await LogFailedLogin(email, currentIpAddress, "حساب بدون كلمة سر", cancellationToken);
+            RegisterFailedAttempt(attemptKey);
+            await LogFailedLogin(email, GetClientIpAddress(), "حساب بدون كلمة سر", cancellationToken);
             return Unauthorized(new { message = "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
         }
 
@@ -84,16 +169,21 @@ public sealed class AuthController : ControllerBase
             var passwordVerified = _passwordService.VerifyPassword(request.Password, member.PasswordHash);
             if (!passwordVerified)
             {
-                await LogFailedLogin(email, currentIpAddress, "كلمة سر غير صحيحة", cancellationToken);
+                RegisterFailedAttempt(attemptKey);
+                await LogFailedLogin(email, GetClientIpAddress(), "كلمة سر غير صحيحة", cancellationToken);
                 return Unauthorized(new { message = "البريد الإلكتروني أو كلمة المرور غير صحيحة." });
             }
         }
         catch (Exception ex)
         {
+            RegisterFailedAttempt(attemptKey);
             _logger?.LogError(ex, "خطأ في التحقق من كلمة المرور للعضو {MemberId}", member.Id);
-            await LogFailedLogin(email, currentIpAddress, $"خطأ في التحقق: {ex.Message}", cancellationToken);
+            await LogFailedLogin(email, GetClientIpAddress(), $"خطأ في التحقق: {ex.Message}", cancellationToken);
             return Unauthorized(new { message = "خطأ تقني في التحقق. يرجى المحاولة بعد قليل." });
         }
+
+        // ✅ Reset attempts on successful login
+        ResetAttempts(attemptKey);
 
         var (token, expiresAtUtc) = _tokenService.CreateToken(member);
         await _auditLogService.RecordAsync(
@@ -101,7 +191,7 @@ public sealed class AuthController : ControllerBase
             "User",
             member.Id,
             member.FullName,
-            currentIpAddress,
+            GetClientIpAddress(),
             member.Id.ToString(),
             null,
             new { member.FullName, member.Email, member.Role, expiresAtUtc },

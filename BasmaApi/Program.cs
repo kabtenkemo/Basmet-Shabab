@@ -1,4 +1,5 @@
 using System.Text;
+using System.Collections.Concurrent;
 using System.Threading.RateLimiting;
 using BasmaApi.Data;
 using BasmaApi.Middleware;
@@ -86,6 +87,9 @@ builder.Services.AddCors(options =>
 
 builder.Services.AddScoped<IPasswordService, BcryptPasswordService>();
 builder.Services.AddScoped<ITokenService, JwtTokenService>();
+
+// In-memory rate limiting for better concurrent user support (like Gym-system-Api)
+builder.Services.AddSingleton<ConcurrentDictionary<string, LoginAttemptState>>(_ => new());
 
 // FIX: Add Rate Limiting for login and auth endpoints
 builder.Services.AddRateLimiter(options =>
