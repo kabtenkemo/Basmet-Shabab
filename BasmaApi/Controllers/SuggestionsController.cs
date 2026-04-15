@@ -34,8 +34,7 @@ public sealed class SuggestionsController : ControllerBase
             return Unauthorized();
 
         var query = _dbContext.Suggestions
-            .Include(s => s.CreatedByMember)
-            .Include(s => s.Votes.Where(v => v.VotedByMemberId == currentMemberId))
+            .AsNoTracking()
             .AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status))
@@ -56,9 +55,22 @@ public sealed class SuggestionsController : ControllerBase
 
         var suggestions = await query
             .OrderByDescending(s => s.CreatedAtUtc)
+            .Select(s => new SuggestionWithVoteResponse(
+                s.Id,
+                s.Title,
+                s.Description,
+                s.Status.ToString(),
+                s.Votes.Count(v => v.IsAcceptance),
+                s.Votes.Count(v => !v.IsAcceptance),
+                s.Votes.Where(v => v.VotedByMemberId == currentMemberId)
+                    .Select(v => (bool?)v.IsAcceptance)
+                    .FirstOrDefault(),
+                s.CreatedByMember != null ? s.CreatedByMember.FullName : "غير معروف",
+                s.CreatedByMember != null ? s.CreatedByMember.Role.ToString() : "غير معروف",
+                s.CreatedAtUtc))
             .ToListAsync(cancellationToken);
 
-        return Ok(suggestions.Select(s => MapToVoteResponse(s, currentMemberId)));
+        return Ok(suggestions);
     }
 
     [HttpGet("{id}")]
@@ -69,14 +81,27 @@ public sealed class SuggestionsController : ControllerBase
             return Unauthorized();
 
         var suggestion = await _dbContext.Suggestions
-            .Include(s => s.CreatedByMember)
-            .Include(s => s.Votes.Where(v => v.VotedByMemberId == currentMemberId))
-            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+            .AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => new SuggestionWithVoteResponse(
+                s.Id,
+                s.Title,
+                s.Description,
+                s.Status.ToString(),
+                s.Votes.Count(v => v.IsAcceptance),
+                s.Votes.Count(v => !v.IsAcceptance),
+                s.Votes.Where(v => v.VotedByMemberId == currentMemberId)
+                    .Select(v => (bool?)v.IsAcceptance)
+                    .FirstOrDefault(),
+                s.CreatedByMember != null ? s.CreatedByMember.FullName : "غير معروف",
+                s.CreatedByMember != null ? s.CreatedByMember.Role.ToString() : "غير معروف",
+                s.CreatedAtUtc))
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (suggestion is null)
             return NotFound();
 
-        return Ok(MapToVoteResponse(suggestion, currentMemberId));
+        return Ok(suggestion);
     }
 
     [HttpPost]
@@ -139,38 +164,40 @@ public sealed class SuggestionsController : ControllerBase
         if (currentMemberId == Guid.Empty)
             return Unauthorized();
 
+        var currentMemberExists = await _dbContext.Members
+            .AsNoTracking()
+            .AnyAsync(member => member.Id == currentMemberId, cancellationToken);
+
+        if (!currentMemberExists)
+        {
+            return Unauthorized("بيانات الجلسة غير متزامنة مع المستخدم الحالي. يرجى تسجيل الدخول مرة أخرى.");
+        }
+
         var suggestion = await _dbContext.Suggestions
-            .Include(s => s.CreatedByMember)
-            .Include(s => s.Votes)
+            .AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
 
         if (suggestion is null)
             return NotFound();
 
         // Check if user already voted
-        var existingVote = suggestion.Votes.FirstOrDefault(v => v.VotedByMemberId == currentMemberId);
+        var existingVote = await _dbContext.SuggestionVotes
+            .FirstOrDefaultAsync(v => v.SuggestionId == id && v.VotedByMemberId == currentMemberId, cancellationToken);
+
+        var effectiveVote = request.IsAcceptance;
         if (existingVote is not null)
         {
-            // Update existing vote
-            // First adjust counts if vote changed
             if (existingVote.IsAcceptance != request.IsAcceptance)
             {
-                if (existingVote.IsAcceptance)
-                    suggestion.AcceptanceCount = Math.Max(0, suggestion.AcceptanceCount - 1);
-                else
-                    suggestion.RejectionCount = Math.Max(0, suggestion.RejectionCount - 1);
-
-                if (request.IsAcceptance)
-                    suggestion.AcceptanceCount++;
-                else
-                    suggestion.RejectionCount++;
-
                 existingVote.IsAcceptance = request.IsAcceptance;
+            }
+            else
+            {
+                effectiveVote = existingVote.IsAcceptance;
             }
         }
         else
         {
-            // Create new vote
             var vote = new SuggestionVote
             {
                 Id = Guid.NewGuid(),
@@ -180,12 +207,7 @@ public sealed class SuggestionsController : ControllerBase
                 IsAcceptance = request.IsAcceptance
             };
 
-            suggestion.Votes.Add(vote);
-
-            if (request.IsAcceptance)
-                suggestion.AcceptanceCount++;
-            else
-                suggestion.RejectionCount++;
+            _dbContext.SuggestionVotes.Add(vote);
         }
 
         try
@@ -195,6 +217,11 @@ public sealed class SuggestionsController : ControllerBase
         catch (DbUpdateException dbEx)
         {
             _logger.LogError(dbEx, "Failed to save vote for suggestion {SuggestionId} by member {MemberId}", id, currentMemberId);
+
+            if (IsVoteMemberForeignKeyViolation(dbEx))
+            {
+                return Unauthorized("بيانات الجلسة غير متزامنة مع المستخدم الحالي. يرجى تسجيل الدخول مرة أخرى.");
+            }
 
             if (IsMissingSuggestionsSchema(dbEx))
             {
@@ -206,13 +233,23 @@ public sealed class SuggestionsController : ControllerBase
                 "تعذر حفظ التصويت بسبب خطأ في قاعدة البيانات.");
         }
 
-        // Reload to get updated vote status
-        var updatedSuggestion = await _dbContext.Suggestions
-            .Include(s => s.CreatedByMember)
-            .Include(s => s.Votes.Where(v => v.VotedByMemberId == currentMemberId))
-            .FirstOrDefaultAsync(s => s.Id == id, cancellationToken);
+        var response = await _dbContext.Suggestions
+            .AsNoTracking()
+            .Where(s => s.Id == id)
+            .Select(s => new SuggestionWithVoteResponse(
+                s.Id,
+                s.Title,
+                s.Description,
+                s.Status.ToString(),
+                s.Votes.Count(v => v.IsAcceptance),
+                s.Votes.Count(v => !v.IsAcceptance),
+                effectiveVote,
+                s.CreatedByMember != null ? s.CreatedByMember.FullName : "غير معروف",
+                s.CreatedByMember != null ? s.CreatedByMember.Role.ToString() : "غير معروف",
+                s.CreatedAtUtc))
+            .FirstOrDefaultAsync(cancellationToken);
 
-        return Ok(MapToVoteResponse(updatedSuggestion!, currentMemberId));
+        return Ok(response!);
     }
 
     [HttpPut("{id}/status")]
@@ -258,22 +295,14 @@ public sealed class SuggestionsController : ControllerBase
                 || message.Contains("SuggestionVotes", StringComparison.OrdinalIgnoreCase));
     }
 
-    private SuggestionWithVoteResponse MapToVoteResponse(Suggestion suggestion, Guid currentMemberId)
+    private static bool IsVoteMemberForeignKeyViolation(DbUpdateException exception)
     {
-        var currentVote = suggestion.Votes?.FirstOrDefault(v => v.VotedByMemberId == currentMemberId);
+        var message = exception.ToString();
 
-        return new SuggestionWithVoteResponse(
-            suggestion.Id,
-            suggestion.Title,
-            suggestion.Description,
-            suggestion.Status.ToString(),
-            suggestion.AcceptanceCount,
-            suggestion.RejectionCount,
-            currentVote?.IsAcceptance,
-            suggestion.CreatedByMember?.FullName ?? "غير معروف",
-            suggestion.CreatedByMember?.Role.ToString() ?? "غير معروف",
-            suggestion.CreatedAtUtc
-        );
+        return message.Contains("FK_SuggestionVotes_Members_VotedByMemberId", StringComparison.OrdinalIgnoreCase)
+            || (message.Contains("FOREIGN KEY", StringComparison.OrdinalIgnoreCase)
+                && message.Contains("VotedByMemberId", StringComparison.OrdinalIgnoreCase)
+                && message.Contains("SuggestionVotes", StringComparison.OrdinalIgnoreCase));
     }
 
     private SuggestionResponse MapToResponse(Suggestion suggestion, Member createdByMember)
