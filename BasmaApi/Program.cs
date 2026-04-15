@@ -92,7 +92,8 @@ builder.Services.AddRateLimiter(options =>
 {
     options.GlobalLimiter = PartitionedRateLimiter.Create<HttpContext, string>(context =>
     {
-        var remoteIp = context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        // FIX: Extract real client IP when behind proxy (Netlify, Cloudflare, etc.)
+        var remoteIp = GetClientIpAddress(context);
         
         // Strict limits for authentication endpoints
         if (context.Request.Path.StartsWithSegments("/api/auth"))
@@ -712,3 +713,40 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
+// Helper function to get real client IP when behind proxy
+static string GetClientIpAddress(HttpContext context)
+{
+    // Check X-Forwarded-For header (used by proxies like Netlify, Cloudflare, Nginx, etc.)
+    if (context.Request.Headers.TryGetValue("X-Forwarded-For", out var forwardedFor))
+    {
+        var ips = forwardedFor.ToString().Split(',');
+        if (ips.Length > 0 && !string.IsNullOrWhiteSpace(ips[0]))
+        {
+            return ips[0].Trim();
+        }
+    }
+
+    // Check CF-Connecting-IP header (Cloudflare)
+    if (context.Request.Headers.TryGetValue("CF-Connecting-IP", out var cfConnectingIp))
+    {
+        var ip = cfConnectingIp.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(ip))
+        {
+            return ip;
+        }
+    }
+
+    // Check X-Real-IP header (Nginx and others)
+    if (context.Request.Headers.TryGetValue("X-Real-IP", out var xRealIp))
+    {
+        var ip = xRealIp.ToString().Trim();
+        if (!string.IsNullOrWhiteSpace(ip))
+        {
+            return ip;
+        }
+    }
+
+    // Fallback to direct connection IP
+    return context.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+}
