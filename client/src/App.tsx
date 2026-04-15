@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from 'react';
-import { FiActivity, FiArrowLeft, FiClock, FiDownload, FiEdit3, FiPlus, FiPrinter, FiSave, FiSend, FiTrash2, FiThumbsUp, FiThumbsDown } from 'react-icons/fi';
+import { FiActivity, FiArrowLeft, FiClock, FiDownload, FiEdit3, FiPlus, FiPrinter, FiSave, FiSend, FiTrash2, FiThumbsUp, FiThumbsDown, FiUserPlus } from 'react-icons/fi';
 import * as XLSX from 'xlsx';
 import { AppShell } from './components/AppShell';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PagedTable, Select, SectionTitle, StatCard, Textarea, type TableColumn } from './components/ui';
 import { useApp } from './context/AppContext';
 import { commentComplaint, createCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, createSuggestion, voteSuggestion } from './api';
-import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, SuggestionItem, SuggestionFormState, TaskAudienceType, TaskFormState, TaskItem } from './types';
+import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, SuggestionItem, SuggestionFormState, TaskAudienceType, TaskFormState, TaskItem, TeamJoinRequest, TeamJoinRequestCreateState, TeamJoinRequestReviewState } from './types';
 
 /**
  * Extract birthDate (YYYY-MM-DD) from Egyptian National ID
@@ -91,6 +91,18 @@ const emptySuggestion: SuggestionFormState = {
   description: ''
 };
 
+const emptyJoinRequest: TeamJoinRequestCreateState = {
+  fullName: '',
+  email: '',
+  phoneNumber: '',
+  nationalId: '',
+  birthDate: '',
+  governorateId: '',
+  committeeId: '',
+  motivation: '',
+  experience: ''
+};
+
 const roleLabels: Record<Role, string> = {
   President: 'رئيس الكيان',
   VicePresident: 'مساعد الرئيس',
@@ -125,6 +137,11 @@ const permissionOptions = [
   { key: 'Members.Create.CommitteeMember', label: 'إنشاء عضو لجنة' }
 ] as const;
 
+const permissionOptionsWithJoinRequests = [
+  ...permissionOptions,
+  { key: 'JoinRequests.Review', label: 'مراجعة طلبات الالتحاق' }
+] as const;
+
 const statusLabels: Record<string, string> = {
   Open: 'مفتوحة',
   InReview: 'قيد المراجعة',
@@ -136,6 +153,13 @@ const priorityLabels: Record<string, string> = {
   Low: 'منخفضة',
   Medium: 'متوسطة',
   High: 'عالية'
+};
+
+const joinRequestStatusLabels: Record<string, string> = {
+  Pending: 'قيد المراجعة',
+  Reviewed: 'تمت المراجعة',
+  Accepted: 'مقبول',
+  Rejected: 'مرفوض'
 };
 
 const pageTitles: Record<SectionKey, { eyebrow: string; title: string; description: string }> = {
@@ -284,13 +308,19 @@ function loginTitle() {
 }
 
 function LoginView() {
-  const { loginUser, loading, error, clearError } = useApp();
+  const { loginUser, loading, error, clearError, submitJoinRequest } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [capsLockDetected, setCapsLockDetected] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(true);
+  const [joinForm, setJoinForm] = useState<TeamJoinRequestCreateState>(emptyJoinRequest);
+  const [joinGovernorates, setJoinGovernorates] = useState<GovernorateOption[]>([]);
+  const [joinCommittees, setJoinCommittees] = useState<CommitteeOption[]>([]);
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [joinSuccess, setJoinSuccess] = useState('');
 
   useEffect(() => {
     clearError();
@@ -302,6 +332,57 @@ function LoginView() {
       setEmail(rememberedEmail);
     }
   }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGovernorates = async () => {
+      try {
+        const data = await getGovernorates();
+        if (!cancelled) {
+          setJoinGovernorates(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setJoinError('تعذر تحميل المحافظات حاليًا. حاول مرة أخرى بعد قليل.');
+        }
+      }
+    };
+
+    void loadGovernorates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCommittees = async () => {
+      if (!joinForm.governorateId) {
+        setJoinCommittees([]);
+        return;
+      }
+
+      try {
+        const data = await getGovernorateCommittees(joinForm.governorateId);
+        if (!cancelled) {
+          setJoinCommittees(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setJoinCommittees([]);
+        }
+      }
+    };
+
+    void loadCommittees();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [joinForm.governorateId]);
 
   const validateEmail = (value: string): boolean => {
     // Basic email validation
@@ -448,6 +529,29 @@ function LoginView() {
     }
   };
 
+  const submitJoin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setJoinError('');
+    setJoinSuccess('');
+
+    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.motivation.trim()) {
+      setJoinError('املأ الاسم والبريد والهاتف والمحافظة وسبب الانضمام قبل الإرسال.');
+      return;
+    }
+
+    setJoinLoading(true);
+    try {
+      const created = await submitJoinRequest(joinForm);
+      setJoinSuccess(`تم إرسال طلبك إلى منسق محافظة ${created.governorateName}${created.assignedToMemberName ? ` (${created.assignedToMemberName})` : ''}.`);
+      setJoinForm(emptyJoinRequest);
+      setJoinCommittees([]);
+    } catch (joinSubmitError) {
+      setJoinError(joinSubmitError instanceof Error ? joinSubmitError.message : 'تعذر إرسال الطلب حاليًا.');
+    } finally {
+      setJoinLoading(false);
+    }
+  };
+
   const warningMessages = [];
   if (capsLockDetected) {
     warningMessages.push('Caps Lock مفعّل، انتبه إلى حالة الأحرف.');
@@ -489,7 +593,8 @@ function LoginView() {
       </section>
 
       <section className="flex items-center justify-center px-6 py-10 sm:px-10 lg:px-12">
-        <Card title={loginTitle()} subtitle="Authentication" className="w-full max-w-xl">
+        <div className="w-full max-w-xl space-y-6">
+        <Card title={loginTitle()} subtitle="Authentication" className="w-full">
           <form className="space-y-4" onSubmit={submit}>
             <Field label="البريد الإلكتروني" hint="مثال: president@basmet.local - Lowercase فقط">
               <Input
@@ -582,6 +687,83 @@ function LoginView() {
 
           </div>
         </Card>
+
+        <Card title="التقديم على التيم" subtitle="Join request">
+          <form className="space-y-4" onSubmit={submitJoin}>
+            <Field label="الاسم رباعي">
+              <Input value={joinForm.fullName} onChange={(event) => setJoinForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="الاسم الكامل" disabled={joinLoading} />
+            </Field>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="البريد الإلكتروني">
+                <Input value={joinForm.email} onChange={(event) => setJoinForm((current) => ({ ...current, email: event.target.value }))} type="email" placeholder="name@example.com" disabled={joinLoading} />
+              </Field>
+              <Field label="رقم الهاتف">
+                <Input value={joinForm.phoneNumber} onChange={(event) => setJoinForm((current) => ({ ...current, phoneNumber: event.target.value }))} inputMode="tel" placeholder="01xxxxxxxxx" disabled={joinLoading} />
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="المحافظة">
+                <Select
+                  value={joinForm.governorateId}
+                  onChange={(event) => setJoinForm((current) => ({ ...current, governorateId: event.target.value, committeeId: '' }))}
+                  disabled={joinLoading}
+                >
+                  <option value="">اختر المحافظة</option>
+                  {joinGovernorates.map((governorate) => <option key={governorate.governorateId} value={governorate.governorateId}>{governorate.name}</option>)}
+                </Select>
+              </Field>
+              <Field label="اللجنة">
+                <Select
+                  value={joinForm.committeeId}
+                  onChange={(event) => setJoinForm((current) => ({ ...current, committeeId: event.target.value }))}
+                  disabled={joinLoading || !joinForm.governorateId}
+                >
+                  <option value="">بدون تحديد</option>
+                  {joinCommittees.map((committee) => <option key={committee.committeeId} value={committee.committeeId}>{committee.name}</option>)}
+                </Select>
+              </Field>
+            </div>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <Field label="الرقم القومي">
+                <Input
+                  value={joinForm.nationalId}
+                  onChange={(event) => {
+                    const nationalId = event.target.value;
+                    setJoinForm((current) => ({
+                      ...current,
+                      nationalId,
+                      birthDate: extractBirthDateFromNationalId(nationalId) ?? current.birthDate
+                    }));
+                  }}
+                  inputMode="numeric"
+                  maxLength={14}
+                  placeholder="اختياري"
+                  disabled={joinLoading}
+                />
+              </Field>
+              <Field label="تاريخ الميلاد">
+                <Input value={joinForm.birthDate} onChange={(event) => setJoinForm((current) => ({ ...current, birthDate: event.target.value }))} type="date" disabled={joinLoading} />
+              </Field>
+            </div>
+            <Field label="سبب الانضمام">
+              <Textarea value={joinForm.motivation} onChange={(event) => setJoinForm((current) => ({ ...current, motivation: event.target.value }))} rows={4} placeholder="اكتب لماذا تريد الانضمام وكيف ستفيد الفريق" disabled={joinLoading} />
+            </Field>
+            <Field label="الخبرات السابقة">
+              <Textarea value={joinForm.experience} onChange={(event) => setJoinForm((current) => ({ ...current, experience: event.target.value }))} rows={3} placeholder="اختياري" disabled={joinLoading} />
+            </Field>
+
+            {joinError && <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{joinError}</div>}
+            {joinSuccess && <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-200">{joinSuccess}</div>}
+
+            <Button type="submit" className="w-full" disabled={joinLoading}>
+              <span className="inline-flex items-center gap-2">
+                <FiUserPlus />
+                {joinLoading ? 'جارٍ إرسال الطلب...' : 'إرسال طلب الالتحاق'}
+              </span>
+            </Button>
+          </form>
+        </Card>
+        </div>
       </section>
     </main>
   );
@@ -783,9 +965,23 @@ function LeaderboardPage() {
 }
 
 function NewsPage() {
-  const { news, members, canManageNews, createNewsItem } = useApp();
+  const { news, members, search, canManageNews, canReviewJoinRequests, joinRequests, reviewJoinRequestItem, createNewsItem } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [newsForm, setNewsForm] = useState<NewsCreateState>(emptyNews);
+  const [joinRequestNotes, setJoinRequestNotes] = useState<Record<string, string>>({});
+
+  const filteredJoinRequests = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    return joinRequests.filter((item) => [
+      item.fullName,
+      item.email,
+      item.phoneNumber,
+      item.governorateName,
+      item.committeeName ?? '',
+      item.status,
+      item.assignedToMemberName ?? ''
+    ].join(' ').toLowerCase().includes(normalized));
+  }, [joinRequests, search]);
 
   const toggleRole = (role: Role) => {
     setNewsForm((current) => ({
@@ -843,6 +1039,75 @@ function NewsPage() {
         )}
       </Card>
 
+      {canReviewJoinRequests && (
+        <Card title="طلبات الالتحاق" subtitle="Join requests routed by governorate">
+          {filteredJoinRequests.length === 0 ? (
+            <EmptyState title="لا توجد طلبات حالياً" description="عند تقديم طلب جديد سيظهر هنا للمتابعة والمراجعة." />
+          ) : (
+            <div className="space-y-4">
+              {filteredJoinRequests.map((item) => (
+                <div key={item.id} className="rounded-3xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex flex-wrap items-start justify-between gap-3">
+                    <div>
+                      <p className="text-lg font-bold text-white">{item.fullName}</p>
+                      <p className="text-sm text-slate-400">{item.email} · {item.phoneNumber}</p>
+                    </div>
+                    <div className="flex flex-wrap gap-2">
+                      <Badge tone={item.status === 'Accepted' ? 'success' : item.status === 'Rejected' ? 'danger' : 'warning'}>
+                        {joinRequestStatusLabels[item.status] ?? item.status}
+                      </Badge>
+                      <Badge tone="brand">{item.governorateName}</Badge>
+                    </div>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 md:grid-cols-2">
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-300">
+                      <p>اللجنة: {item.committeeName ?? 'غير محددة'}</p>
+                      <p className="mt-1">المحول إليه: {item.assignedToMemberName ?? 'سيظهر عند التوزيع'}</p>
+                      <p className="mt-1">تاريخ الإرسال: {formatDate(item.createdAtUtc)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-300">
+                      <p className="font-semibold text-white">سبب الانضمام</p>
+                      <p className="mt-2 leading-7">{item.motivation}</p>
+                    </div>
+                  </div>
+
+                  {item.experience && (
+                    <div className="mt-3 rounded-2xl border border-white/10 bg-slate-950/30 p-3 text-sm text-slate-300">
+                      <p className="font-semibold text-white">الخبرات السابقة</p>
+                      <p className="mt-2 leading-7">{item.experience}</p>
+                    </div>
+                  )}
+
+                  <div className="mt-4 grid gap-3 lg:grid-cols-[1fr_auto]">
+                    <Textarea
+                      value={joinRequestNotes[item.id] ?? item.adminNotes ?? ''}
+                      onChange={(event) => setJoinRequestNotes((current) => ({ ...current, [item.id]: event.target.value }))}
+                      rows={3}
+                      placeholder="ملاحظات المنسق أو الإدارة"
+                    />
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button variant="secondary" onClick={() => void reviewJoinRequestItem(item.id, { status: 'Accepted', adminNotes: joinRequestNotes[item.id] ?? item.adminNotes ?? '' })}>
+                        قبول
+                      </Button>
+                      <Button variant="danger" onClick={() => void reviewJoinRequestItem(item.id, { status: 'Rejected', adminNotes: joinRequestNotes[item.id] ?? item.adminNotes ?? '' })}>
+                        رفض
+                      </Button>
+                    </div>
+                  </div>
+
+                  {(item.reviewedByMemberName || item.reviewedAtUtc) && (
+                    <p className="mt-3 text-xs text-slate-400">
+                      تمت المراجعة بواسطة {item.reviewedByMemberName ?? 'الإدارة'} {item.reviewedAtUtc ? `في ${formatDate(item.reviewedAtUtc)}` : ''}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+      )}
+
       <Modal
         open={createOpen}
         onClose={() => setCreateOpen(false)}
@@ -897,7 +1162,7 @@ function NewsPage() {
 }
 
 function MembersPage() {
-  const { members, search, createMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, user } = useApp();
+  const { members, search, createMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, canReviewJoinRequests, joinRequests, reviewJoinRequestItem, user } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedMemberId, setSelectedMemberId] = useState('');
@@ -909,6 +1174,7 @@ function MembersPage() {
   const [committees, setCommittees] = useState<CommitteeOption[]>([]);
   const [scopeLoading, setScopeLoading] = useState(false);
   const [memberFormError, setMemberFormError] = useState('');
+  const [joinRequestNotes, setJoinRequestNotes] = useState<Record<string, string>>({});
   const visibleGovernorates = useMemo(() => {
     if (user?.role === 'GovernorCoordinator' && user.governorName) {
       return governorates.filter((governorate) => governorate.name === user.governorName);
@@ -921,6 +1187,19 @@ function MembersPage() {
     const normalized = search.trim().toLowerCase();
     return members.filter((member) => [member.fullName, member.email, member.role, member.permissions.join(' ')].join(' ').toLowerCase().includes(normalized));
   }, [members, search]);
+
+  const filteredJoinRequests = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    return joinRequests.filter((item) => [
+      item.fullName,
+      item.email,
+      item.phoneNumber,
+      item.governorateName,
+      item.committeeName ?? '',
+      item.status,
+      item.assignedToMemberName ?? ''
+    ].join(' ').toLowerCase().includes(normalized));
+  }, [joinRequests, search]);
 
   useEffect(() => {
     if (!selectedMemberId && filtered[0]) {
@@ -1171,7 +1450,7 @@ function MembersPage() {
               <Field label="منح صلاحيات">
                 <div className="max-h-56 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
                   <div className="grid gap-2">
-                    {permissionOptions.map((permission) => (
+                    {permissionOptionsWithJoinRequests.map((permission) => (
                       <label key={permission.key} className="flex cursor-pointer items-center gap-3 rounded-xl bg-slate-950/45 px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-950/70">
                         <input
                           type="checkbox"

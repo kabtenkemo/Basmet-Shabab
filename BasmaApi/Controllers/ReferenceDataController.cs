@@ -20,6 +20,7 @@ public sealed class ReferenceDataController : ControllerBase
         _dbContext = dbContext;
     }
 
+    [AllowAnonymous]
     [HttpGet]
     public async Task<ActionResult<IEnumerable<GovernorateResponse>>> GetGovernorates(CancellationToken cancellationToken)
     {
@@ -32,6 +33,7 @@ public sealed class ReferenceDataController : ControllerBase
         return Ok(governorates);
     }
 
+    [AllowAnonymous]
     [HttpGet("{governorateId:guid}/committees")]
     public async Task<ActionResult<IEnumerable<CommitteeResponse>>> GetCommittees(Guid governorateId, CancellationToken cancellationToken)
     {

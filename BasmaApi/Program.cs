@@ -256,6 +256,16 @@ using (var scope = app.Services.CreateScope())
 
         try
         {
+            EnsureJoinRequestsSchema(dbContext);
+            startupLogger.LogInformation("âœ… Join request schema ensured");
+        }
+        catch (Exception ex)
+        {
+            startupLogger.LogWarning(ex, "âš ï¸ Failed to ensure join request schema (may already exist)");
+        }
+
+        try
+        {
             SeedReferenceData(dbContext);
             startupLogger.LogInformation("✅ Reference data seeded");
         }
@@ -553,6 +563,52 @@ BEGIN
     CREATE UNIQUE INDEX IX_NewsTargetMembers_NewsPostId_MemberId ON dbo.NewsTargetMembers (NewsPostId, MemberId);
 END;
 " );
+}
+
+static void EnsureJoinRequestsSchema(AppDbContext dbContext)
+{
+    dbContext.Database.ExecuteSqlRaw(@"
+IF OBJECT_ID('dbo.TeamJoinRequests', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.TeamJoinRequests (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_TeamJoinRequests PRIMARY KEY,
+        FullName nvarchar(150) NOT NULL,
+        Email nvarchar(250) NOT NULL,
+        PhoneNumber nvarchar(30) NOT NULL,
+        NationalId nvarchar(14) NULL,
+        BirthDate date NULL,
+        GovernorateId uniqueidentifier NOT NULL,
+        CommitteeId uniqueidentifier NULL,
+        Motivation nvarchar(3000) NOT NULL,
+        Experience nvarchar(3000) NULL,
+        Status nvarchar(30) NOT NULL CONSTRAINT DF_TeamJoinRequests_Status DEFAULT 'Pending',
+        AdminNotes nvarchar(2000) NULL,
+        AssignedToMemberId uniqueidentifier NULL,
+        ReviewedByMemberId uniqueidentifier NULL,
+        CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_TeamJoinRequests_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+        ReviewedAtUtc datetime2 NULL,
+        CONSTRAINT FK_TeamJoinRequests_Governorates_GovernorateId FOREIGN KEY (GovernorateId) REFERENCES dbo.Governorates (Id) ON DELETE NO ACTION,
+        CONSTRAINT FK_TeamJoinRequests_Committees_CommitteeId FOREIGN KEY (CommitteeId) REFERENCES dbo.Committees (Id) ON DELETE NO ACTION,
+        CONSTRAINT FK_TeamJoinRequests_Members_AssignedToMemberId FOREIGN KEY (AssignedToMemberId) REFERENCES dbo.Members (Id) ON DELETE NO ACTION,
+        CONSTRAINT FK_TeamJoinRequests_Members_ReviewedByMemberId FOREIGN KEY (ReviewedByMemberId) REFERENCES dbo.Members (Id) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TeamJoinRequests_Status' AND object_id = OBJECT_ID('dbo.TeamJoinRequests'))
+BEGIN
+    CREATE INDEX IX_TeamJoinRequests_Status ON dbo.TeamJoinRequests (Status);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TeamJoinRequests_CreatedAtUtc' AND object_id = OBJECT_ID('dbo.TeamJoinRequests'))
+BEGIN
+    CREATE INDEX IX_TeamJoinRequests_CreatedAtUtc ON dbo.TeamJoinRequests (CreatedAtUtc DESC);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TeamJoinRequests_GovernorateId' AND object_id = OBJECT_ID('dbo.TeamJoinRequests'))
+BEGIN
+    CREATE INDEX IX_TeamJoinRequests_GovernorateId ON dbo.TeamJoinRequests (GovernorateId);
+END;
+");
 }
 
 static void SeedReferenceData(AppDbContext dbContext)

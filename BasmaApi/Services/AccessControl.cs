@@ -13,6 +13,7 @@ public static class AccessControl
     public const string ManageRolesPermission = "Roles.Manage";
     public const string ManagePointsPermission = "Points.Manage";
     public const string ManageComplaintsPermission = "Complaints.Manage";
+    public const string ReviewJoinRequestsPermission = "JoinRequests.Review";
     public const string ViewDashboardPermission = "Dashboard.View";
     public const string CreateCentralMemberPermission = "Members.Create.CentralMember";
     public const string CreateGovernorCoordinatorPermission = "Members.Create.GovernorCoordinator";
@@ -97,6 +98,11 @@ public static class AccessControl
         return actor.Role == MemberRole.President || HasPermission(actor, ManageComplaintsPermission);
     }
 
+    public static bool CanReviewJoinRequests(Member actor)
+    {
+        return actor.Role == MemberRole.President || HasPermission(actor, ReviewJoinRequestsPermission);
+    }
+
     public static bool CanManageCommitteeCatalog(Member actor)
     {
         return actor.Role is MemberRole.President or MemberRole.VicePresident or MemberRole.GovernorCoordinator;
@@ -144,7 +150,7 @@ public static class AccessControl
     {
         return role switch
         {
-            MemberRole.President => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
+            MemberRole.President => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ReviewJoinRequestsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
             MemberRole.VicePresident => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
             MemberRole.CentralMember => [ManageUsersPermission, ManageComplaintsPermission, ViewDashboardPermission],
             MemberRole.GovernorCoordinator => [ManageUsersPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],

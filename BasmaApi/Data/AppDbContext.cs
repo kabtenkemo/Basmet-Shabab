@@ -11,7 +11,8 @@ public sealed class AppDbContext : DbContext
     {
         "Member",
         "MemberTask",
-        "Complaint"
+        "Complaint",
+        "JoinRequest"
     };
 
     private readonly IAuditRequestContextAccessor _auditRequestContextAccessor;
@@ -58,6 +59,8 @@ public sealed class AppDbContext : DbContext
     public DbSet<Suggestion> Suggestions => Set<Suggestion>();
 
     public DbSet<SuggestionVote> SuggestionVotes => Set<SuggestionVote>();
+
+    public DbSet<TeamJoinRequest> TeamJoinRequests => Set<TeamJoinRequest>();
 
     public override int SaveChanges()
     {
@@ -296,6 +299,42 @@ public sealed class AppDbContext : DbContext
                 .HasForeignKey(vote => vote.VotedByMemberId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<TeamJoinRequest>(entity =>
+        {
+            entity.HasIndex(item => item.Status);
+            entity.HasIndex(item => item.CreatedAtUtc).IsDescending();
+            entity.HasIndex(item => item.GovernorateId);
+            entity.Property(item => item.FullName).HasMaxLength(150);
+            entity.Property(item => item.Email).HasMaxLength(250);
+            entity.Property(item => item.PhoneNumber).HasMaxLength(30);
+            entity.Property(item => item.NationalId).HasMaxLength(14);
+            entity.Property(item => item.Motivation).HasMaxLength(3000);
+            entity.Property(item => item.Experience).HasMaxLength(3000);
+            entity.Property(item => item.AdminNotes).HasMaxLength(2000);
+            entity.Property(item => item.BirthDate).HasColumnType("date");
+            entity.Property(item => item.Status).HasConversion<string>().HasMaxLength(30);
+
+            entity.HasOne(item => item.Governorate)
+                .WithMany()
+                .HasForeignKey(item => item.GovernorateId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(item => item.Committee)
+                .WithMany()
+                .HasForeignKey(item => item.CommitteeId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(item => item.AssignedToMember)
+                .WithMany()
+                .HasForeignKey(item => item.AssignedToMemberId)
+                .OnDelete(DeleteBehavior.NoAction);
+
+            entity.HasOne(item => item.ReviewedByMember)
+                .WithMany()
+                .HasForeignKey(item => item.ReviewedByMemberId)
+                .OnDelete(DeleteBehavior.NoAction);
+        });
     }
 
     private void AppendAuditLogs()
@@ -370,6 +409,7 @@ public sealed class AppDbContext : DbContext
             nameof(Member) => "User",
             nameof(MemberTask) => "Task",
             nameof(Complaint) => "Complaint",
+            nameof(TeamJoinRequest) => "JoinRequest",
             _ => typeName
         };
     }

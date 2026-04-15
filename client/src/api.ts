@@ -20,6 +20,9 @@ import type {
   MemberAdminItem,
   MemberCreateFormState,
   PointFormState,
+  TeamJoinRequest,
+  TeamJoinRequestCreateState,
+  TeamJoinRequestReviewState,
   TaskFormState,
   TaskItem,
   SuggestionItem,
@@ -253,6 +256,32 @@ export async function getGovernorateCommittees(governorateId: string) {
 
 export async function createCommittee(governorateId: string, form: CommitteeCreateFormState) {
   return request<CommitteeOption>({ method: 'POST', url: `/api/governorates/${governorateId}/committees`, data: form });
+}
+
+export async function createJoinRequest(form: TeamJoinRequestCreateState) {
+  return request<TeamJoinRequest>({
+    method: 'POST',
+    url: '/api/join-requests',
+    data: {
+      fullName: form.fullName.trim(),
+      email: form.email.trim().toLowerCase(),
+      phoneNumber: form.phoneNumber.trim(),
+      nationalId: form.nationalId.trim() || null,
+      birthDate: form.birthDate || null,
+      governorateId: form.governorateId,
+      committeeId: form.committeeId || null,
+      motivation: form.motivation.trim(),
+      experience: form.experience.trim() || null
+    }
+  });
+}
+
+export async function getJoinRequests() {
+  return request<TeamJoinRequest[]>({ method: 'GET', url: '/api/join-requests' });
+}
+
+export async function reviewJoinRequest(id: string, form: TeamJoinRequestReviewState) {
+  return request({ method: 'PUT', url: `/api/join-requests/${id}/review`, data: form });
 }
 
 export async function grantRole(memberId: string, role: string) {

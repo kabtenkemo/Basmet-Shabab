@@ -3,12 +3,14 @@ import {
   adjustPoints,
   changePassword as submitPasswordChangeRequest,
   createComplaint,
+  createJoinRequest,
   createMember,
   createNews,
   createTask,
   deleteTask,
   getComplaints,
   getDashboard,
+  getJoinRequests,
   getLeaderboard,
   getMembers,
   getMe,
@@ -20,6 +22,7 @@ import {
   grantRole,
   login,
   resetMemberPassword,
+  reviewJoinRequest,
   reviewComplaint,
   setStoredToken,
   updateTask
@@ -39,6 +42,9 @@ import type {
   NavigationItem,
   PointFormState,
   SectionKey,
+  TeamJoinRequest,
+  TeamJoinRequestCreateState,
+  TeamJoinRequestReviewState,
   TaskFormState,
   TaskItem,
   ThemeMode
@@ -63,6 +69,7 @@ interface AppContextValue {
   members: MemberAdminItem[];
   tasks: TaskItem[];
   complaints: ComplaintItem[];
+  joinRequests: TeamJoinRequest[];
   news: NewsItem[];
   myComplaints: ComplaintItem[];
   activityLogs: ActivityLogEntry[];
@@ -76,6 +83,7 @@ interface AppContextValue {
   canCreateMembers: boolean;
   canManageComplaints: boolean;
   canManagePoints: boolean;
+  canReviewJoinRequests: boolean;
   canViewReports: boolean;
   canManageNews: boolean;
   navigation: NavigationItem[];
@@ -94,15 +102,17 @@ interface AppContextValue {
   updateTaskItem: (id: string, form: TaskFormState) => Promise<void>;
   deleteTaskItem: (id: string) => Promise<void>;
   createComplaintItem: (form: ComplaintFormState) => Promise<void>;
+  submitJoinRequest: (form: TeamJoinRequestCreateState) => Promise<TeamJoinRequest>;
   createNewsItem: (form: NewsCreateState) => Promise<void>;
   reviewComplaintItem: (id: string, review: ComplaintReviewState) => Promise<void>;
+  reviewJoinRequestItem: (id: string, review: TeamJoinRequestReviewState) => Promise<void>;
   clearError: () => void;
   addActivity: (title: string, description: string, tone?: ActivityLogEntry['tone']) => void;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
 
-const sectionLabels: Record<SectionKey, string> = {
+const sectionLabels: Partial<Record<SectionKey, string>> = {
   overview: 'الملخص',
   leaderboard: 'المتصدرين',
   news: 'الأخبار',
@@ -175,6 +185,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [members, setMembers] = useState<MemberAdminItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
+  const [joinRequests, setJoinRequests] = useState<TeamJoinRequest[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
   const [myComplaints, setMyComplaints] = useState<ComplaintItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
@@ -207,6 +218,10 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   const canManagePoints = useMemo(() => {
     return user ? user.role === 'President' || user.role === 'VicePresident' || hasPermission(user, 'Points.Manage') : false;
+  }, [user]);
+
+  const canReviewJoinRequests = useMemo(() => {
+    return user ? user.role === 'President' || hasPermission(user, 'JoinRequests.Review') : false;
   }, [user]);
 
   const canViewReports = useMemo(() => {
@@ -244,6 +259,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         setMembers([]);
         setTasks([]);
         setComplaints([]);
+        setJoinRequests([]);
         setNews([]);
         setMyComplaints([]);
         return;
@@ -306,6 +322,16 @@ export function AppProvider({ children }: PropsWithChildren) {
         setComplaints([]);
       }
 
+      if (currentMember.role === 'President' || hasPermission(currentMember, 'JoinRequests.Review')) {
+        const joinRequestsResult = await getJoinRequests().catch(err => {
+          console.warn('Failed to load join requests:', err);
+          return [] as TeamJoinRequest[];
+        });
+        setJoinRequests(joinRequestsResult || []);
+      } else {
+        setJoinRequests([]);
+      }
+
       if (!navigationSeed.some((item) => item.key === section && sectionAllowed(currentMember, item))) {
         setSection('overview');
       }
@@ -334,6 +360,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setMembers([]);
       setTasks([]);
       setComplaints([]);
+      setJoinRequests([]);
       setNews([]);
       setMyComplaints([]);
       setSection('overview');
@@ -425,6 +452,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setMembers([]);
     setTasks([]);
     setComplaints([]);
+    setJoinRequests([]);
     setNews([]);
     setMyComplaints([]);
     setSection('overview');
@@ -583,6 +611,21 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [appendActivity, loadSession]);
 
+  const submitJoinRequest = useCallback(async (form: TeamJoinRequestCreateState) => {
+    setLoading(true);
+    setError('');
+    try {
+      const created = await createJoinRequest(form);
+      appendActivity('Ø·Ù„Ø¨ Ø§Ù„Ø§Ù„ØªØ­Ø§Ù‚', `ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ ${created.fullName} Ø¥Ù„Ù‰ ${created.governorateName}`, 'success');
+      return created;
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'ØªØ¹Ø°Ø± Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ Ø§Ù„Ø§Ù„ØªØ­Ø§Ù‚');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity]);
+
   const createNewsItem = useCallback(async (form: NewsCreateState) => {
     setLoading(true);
     setError('');
@@ -613,6 +656,21 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [appendActivity, loadSession]);
 
+  const reviewJoinRequestItem = useCallback(async (id: string, review: TeamJoinRequestReviewState) => {
+    setLoading(true);
+    setError('');
+    try {
+      await reviewJoinRequest(id, review);
+      appendActivity('Ù…Ø±Ø§Ø¬Ø¹Ø© Ø·Ù„Ø¨ Ø§Ù„Ø§Ù„ØªØ­Ø§Ù‚', `ØªÙ… Ø­ÙØ¸ Ø§Ù„Ø·Ù„Ø¨ Ø¹Ù„Ù‰ Ø­Ø§Ù„Ø© ${review.status}`, 'success');
+      await loadSession();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'ØªØ¹Ø°Ø± Ø­ÙØ¸ Ù…Ø±Ø§Ø¬Ø¹Ø© Ø§Ù„Ø·Ù„Ø¨');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession]);
+
   const value = useMemo<AppContextValue>(() => ({
     token,
     user,
@@ -621,6 +679,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     members,
     tasks,
     complaints,
+    joinRequests,
     news,
     myComplaints,
     activityLogs,
@@ -634,6 +693,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     canCreateMembers,
     canManageComplaints,
     canManagePoints,
+    canReviewJoinRequests,
     canViewReports,
     canManageNews,
     navigation,
@@ -652,8 +712,10 @@ export function AppProvider({ children }: PropsWithChildren) {
     updateTaskItem,
     deleteTaskItem,
     createComplaintItem,
+    submitJoinRequest,
     createNewsItem,
     reviewComplaintItem,
+    reviewJoinRequestItem,
     clearError: () => setError(''),
     addActivity: appendActivity
   }), [
@@ -662,12 +724,15 @@ export function AppProvider({ children }: PropsWithChildren) {
     assignPermission,
     canManageComplaints,
     canManagePoints,
+    canReviewJoinRequests,
     canManageUsers,
     canViewReports,
     canManageNews,
     complaints,
+    joinRequests,
     news,
     createComplaintItem,
+    submitJoinRequest,
     createNewsItem,
     createMemberItem,
     createTaskItem,
@@ -682,6 +747,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     navigation,
     resetPassword,
     reviewComplaintItem,
+    reviewJoinRequestItem,
     search,
     section,
     tasks,

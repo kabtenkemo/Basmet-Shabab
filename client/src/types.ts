@@ -285,6 +285,48 @@ export type SuggestionFormState = {
   description: string;
 };
 
+export type JoinRequestStatus = 'Pending' | 'Reviewed' | 'Accepted' | 'Rejected';
+
+export type TeamJoinRequest = {
+  id: string;
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  nationalId: string | null;
+  birthDate: string | null;
+  governorateId: string;
+  governorateName: string;
+  committeeId: string | null;
+  committeeName: string | null;
+  motivation: string;
+  experience: string | null;
+  status: JoinRequestStatus | string;
+  adminNotes: string | null;
+  assignedToMemberId: string | null;
+  assignedToMemberName: string | null;
+  reviewedByMemberId: string | null;
+  reviewedByMemberName: string | null;
+  createdAtUtc: string;
+  reviewedAtUtc: string | null;
+};
+
+export type TeamJoinRequestCreateState = {
+  fullName: string;
+  email: string;
+  phoneNumber: string;
+  nationalId: string;
+  birthDate: string;
+  governorateId: string;
+  committeeId: string;
+  motivation: string;
+  experience: string;
+};
+
+export type TeamJoinRequestReviewState = {
+  status: 'Accepted' | 'Rejected';
+  adminNotes: string;
+};
+
 export type NavigationItem = {
   key: SectionKey;
   label: string;
