@@ -1,2 +1,2 @@
-/api/* https://basmet-shabab.runasp.net/api/:splat 200
+/api/* http://basmet-shabab.runasp.net/api/:splat 200
 /* /index.html 200
