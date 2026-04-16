@@ -85,9 +85,22 @@ public sealed class AuthController : ControllerBase
             return Unauthorized(new { message = "البريد الإلكتروني وكلمة المرور مطلوبان." });
         }
 
-        var member = await _dbContext.Members
-            .Include(candidate => candidate.PermissionGrants)
-            .FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+        Member? member;
+        try
+        {
+            member = await _dbContext.Members
+                .Include(candidate => candidate.PermissionGrants)
+                .FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Login failed while querying member {Email}", email);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "تعذر الاتصال بقاعدة البيانات. يرجى المحاولة بعد قليل.",
+                traceId = HttpContext.TraceIdentifier
+            });
+        }
         
         if (member is null)
         {
@@ -118,17 +131,39 @@ public sealed class AuthController : ControllerBase
             return Unauthorized(new { message = "خطأ تقني في التحقق. يرجى المحاولة بعد قليل." });
         }
 
-        var (token, expiresAtUtc) = _tokenService.CreateToken(member);
-        await _auditLogService.RecordAsync(
-            "Login_Success",
-            "User",
-            member.Id,
-            member.FullName,
-            GetClientIpAddress(),
-            member.Id.ToString(),
-            null,
-            new { member.FullName, member.Email, member.Role, expiresAtUtc },
-            cancellationToken);
+        string token;
+        DateTime expiresAtUtc;
+        try
+        {
+            (token, expiresAtUtc) = _tokenService.CreateToken(member);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Token creation failed for member {MemberId}", member.Id);
+            return StatusCode(StatusCodes.Status500InternalServerError, new
+            {
+                message = "تعذر إنشاء رمز الدخول. يرجى المحاولة بعد قليل.",
+                traceId = HttpContext.TraceIdentifier
+            });
+        }
+
+        try
+        {
+            await _auditLogService.RecordAsync(
+                "Login_Success",
+                "User",
+                member.Id,
+                member.FullName,
+                GetClientIpAddress(),
+                member.Id.ToString(),
+                null,
+                new { member.FullName, member.Email, member.Role, expiresAtUtc },
+                cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to record login success for member {MemberId}", member.Id);
+        }
 
         return Ok(new AuthResponse(
             member.Id,
