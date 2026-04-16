@@ -171,13 +171,21 @@ public sealed class JoinRequestsController : ControllerBase
 
         if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
         {
-            if (currentMember.GovernorateId is not null)
+            var governorName = string.IsNullOrWhiteSpace(currentMember.GovernorName)
+                ? null
+                : currentMember.GovernorName.Trim().ToLowerInvariant();
+
+            if (currentMember.GovernorateId is not null && governorName is not null)
+            {
+                query = query.Where(item => item.GovernorateId == currentMember.GovernorateId
+                    || item.Governorate.Name.ToLower() == governorName);
+            }
+            else if (currentMember.GovernorateId is not null)
             {
                 query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
             }
-            else if (!string.IsNullOrWhiteSpace(currentMember.GovernorName))
+            else if (governorName is not null)
             {
-                var governorName = currentMember.GovernorName.Trim().ToLower();
                 query = query.Where(item => item.Governorate.Name.ToLower() == governorName);
             }
         }
@@ -186,6 +194,14 @@ public sealed class JoinRequestsController : ControllerBase
             .OrderBy(item => item.Status)
             .ThenByDescending(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Join requests list for {MemberId} role {Role} governorateId {GovernorateId} governorName {GovernorName} returned {Count} items.",
+            currentMember.Id,
+            currentMember.Role,
+            currentMember.GovernorateId,
+            currentMember.GovernorName,
+            items.Count);
 
         return Ok(items.Select(MapResponse));
     }
@@ -219,19 +235,10 @@ public sealed class JoinRequestsController : ControllerBase
             return NotFound();
         }
 
-        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
+        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident)
+            && !IsSameGovernorate(currentMember, item))
         {
-            if (currentMember.GovernorateId is not null && item.GovernorateId != currentMember.GovernorateId)
-            {
-                return Forbid();
-            }
-
-            if (currentMember.GovernorateId is null
-                && !string.IsNullOrWhiteSpace(currentMember.GovernorName)
-                && !string.Equals(item.Governorate?.Name, currentMember.GovernorName.Trim(), StringComparison.OrdinalIgnoreCase))
-            {
-                return Forbid();
-            }
+            return Forbid();
         }
 
         if (nextStatus == JoinRequestStatus.Rejected)
@@ -373,5 +380,20 @@ public sealed class JoinRequestsController : ControllerBase
             item.ReviewedByMember?.FullName,
             item.CreatedAtUtc,
             item.ReviewedAtUtc);
+    }
+
+    private static bool IsSameGovernorate(Member member, TeamJoinRequest request)
+    {
+        if (member.GovernorateId is not null && member.GovernorateId == request.GovernorateId)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(member.GovernorName) && request.Governorate is not null)
+        {
+            return string.Equals(member.GovernorName.Trim(), request.Governorate.Name.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
     }
 }

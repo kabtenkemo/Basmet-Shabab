@@ -1123,8 +1123,10 @@ function NewsPage() {
 }
 
 function JoinRequestsPage() {
-  const { joinRequests, search, canReviewJoinRequests, reviewJoinRequestItem } = useApp();
+  const { joinRequests, search, canReviewJoinRequests, reviewJoinRequestItem, loading } = useApp();
   const [joinRequestNotes, setJoinRequestNotes] = useState<Record<string, string>>({});
+
+  const isLoading = loading && joinRequests.length === 0;
 
   const filteredJoinRequests = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -1153,7 +1155,9 @@ function JoinRequestsPage() {
         </Card>
       ) : (
         <Card title="طلبات الالتحاق" subtitle="Join requests routed by governorate">
-          {filteredJoinRequests.length === 0 ? (
+          {isLoading ? (
+            <EmptyState title="جاري تحميل الطلبات" description="يتم الآن جلب طلبات الالتحاق الخاصة بمحافظتك." />
+          ) : filteredJoinRequests.length === 0 ? (
             <EmptyState title="لا توجد طلبات حالياً" description="عند تقديم طلب جديد سيظهر هنا للمتابعة والمراجعة." />
           ) : (
             <div className="space-y-4">

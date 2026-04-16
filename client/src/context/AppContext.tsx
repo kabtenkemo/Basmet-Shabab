@@ -364,6 +364,9 @@ export function AppProvider({ children }: PropsWithChildren) {
           return [] as TeamJoinRequest[];
         });
         setJoinRequests(joinRequestsResult || []);
+        if (import.meta.env.DEV) {
+          console.debug('Join requests loaded:', joinRequestsResult);
+        }
       } else {
         setJoinRequests([]);
       }
