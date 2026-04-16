@@ -333,9 +333,10 @@ export function AppProvider({ children }: PropsWithChildren) {
         setJoinRequests([]);
       }
 
-      if (!navigationSeed.some((item) => item.key === section && sectionAllowed(currentMember, item))) {
-        setSection('overview');
-      }
+      setSection((currentSection) => {
+        const allowed = navigationSeed.some((item) => item.key === currentSection && sectionAllowed(currentMember, item));
+        return allowed ? currentSection : 'overview';
+      });
     } catch (loadError) {
       const errorMsg = loadError instanceof Error ? loadError.message : 'تعذر تحميل البيانات';
       setError(errorMsg);
@@ -343,7 +344,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     } finally {
       setLoading(false);
     }
-  }, [section, token]);
+  }, [token]);
 
   useEffect(() => {
     document.documentElement.classList.add('dark');
@@ -374,6 +375,10 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
 
     const interval = window.setInterval(() => {
+      if (document.visibilityState !== 'visible') {
+        return;
+      }
+
       void loadSession(token);
     }, 45000);
 
@@ -416,7 +421,6 @@ export function AppProvider({ children }: PropsWithChildren) {
       setToken(response.token);
       setStoredToken(response.token);
       setActivityLogs((current) => [createLog('تسجيل الدخول', `تم تسجيل دخول ${response.fullName}`, 'success'), ...current]);
-      void loadSession(response.token);
     } catch (loginError) {
       let errorMessage = 'تعذر تنفيذ عملية تسجيل الدخول';
       
@@ -498,6 +502,9 @@ export function AppProvider({ children }: PropsWithChildren) {
       setLoading(false);
     }
   }, [appendActivity, loadSession]);
+
+  const refresh = useCallback(() => loadSession(), [loadSession]);
+  const clearError = useCallback(() => setError(''), []);
 
   const changePassword = useCallback(async (currentPassword: string, newPassword: string) => {
     setLoading(true);
@@ -720,7 +727,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setSearch,
     loginUser,
     logout,
-    refresh: () => loadSession(),
+    refresh,
     createMember: createMemberItem,
     changeRole,
     assignPermission,
@@ -735,12 +742,13 @@ export function AppProvider({ children }: PropsWithChildren) {
     createNewsItem,
     reviewComplaintItem,
     reviewJoinRequestItem,
-    clearError: () => setError(''),
+    clearError,
     addActivity: appendActivity
   }), [
     activityLogs,
     appendActivity,
     assignPermission,
+    canCreateMembers,
     canManageComplaints,
     canManagePoints,
     canReviewJoinRequests,
@@ -767,6 +775,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     resetPassword,
     reviewComplaintItem,
     reviewJoinRequestItem,
+    refresh,
     search,
     section,
     tasks,
@@ -774,6 +783,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     token,
     updateTaskItem,
     user,
+    clearError,
     changePoints,
     changeRole,
     changePassword,

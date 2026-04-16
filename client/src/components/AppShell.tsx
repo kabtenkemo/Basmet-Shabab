@@ -1,5 +1,5 @@
 import { FiActivity, FiAward, FiBarChart2, FiCheckSquare, FiClipboard, FiLayers, FiLogOut, FiMenu, FiSearch, FiShield, FiUsers, FiMessageSquare, FiUser, FiFileText, FiEdit } from 'react-icons/fi';
-import { useMemo, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { useApp } from '../context/AppContext';
 import type { SectionKey } from '../types';
 
@@ -21,11 +21,26 @@ const icons: Record<string, ReactNode> = {
 export function AppShell({ children }: { children: ReactNode }) {
   const { user, navigation, section, setSection, logout, search, setSearch, error, clearError } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchDraft, setSearchDraft] = useState(search);
   const isLight = false;
 
   const currentTitle = useMemo(() => {
     return navigation.find((item) => item.key === section)?.label ?? 'لوحة التحكم';
   }, [navigation, section]);
+
+  useEffect(() => {
+    setSearchDraft(search);
+  }, [search]);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      if (searchDraft !== search) {
+        setSearch(searchDraft);
+      }
+    }, 180);
+
+    return () => window.clearTimeout(timer);
+  }, [searchDraft, search, setSearch]);
 
   const navigate = (value: SectionKey) => {
     if (value !== section) {
@@ -97,8 +112,8 @@ export function AppShell({ children }: { children: ReactNode }) {
               <div className={`flex flex-1 items-center gap-3 rounded-2xl border px-4 py-3 ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/5'}`}>
                 <FiSearch className={isLight ? 'text-slate-500' : 'text-slate-400'} />
                 <input
-                  value={search}
-                  onChange={(event) => setSearch(event.target.value)}
+                  value={searchDraft}
+                  onChange={(event) => setSearchDraft(event.target.value)}
                   placeholder="بحث داخل الأقسام الحالية"
                   className={`w-full bg-transparent text-sm outline-none placeholder:text-slate-500 ${isLight ? 'text-slate-900' : 'text-white'}`}
                 />

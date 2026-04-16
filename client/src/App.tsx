@@ -219,12 +219,15 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string; descripti
   }
 };
 
+const dateTimeFormatter = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' });
+const dateOnlyFormatter = new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium' });
+
 function formatDate(value: string | null | undefined) {
   if (!value) {
     return '—';
   }
 
-  return new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value));
+  return dateTimeFormatter.format(new Date(value));
 }
 
 function formatDateOnly(value: string | null | undefined) {
@@ -232,7 +235,7 @@ function formatDateOnly(value: string | null | undefined) {
     return '—';
   }
 
-  return new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium' }).format(new Date(`${value}T00:00:00`));
+  return dateOnlyFormatter.format(new Date(`${value}T00:00:00`));
 }
 
 function roleLabel(role: string) {
@@ -2773,11 +2776,7 @@ export default function App() {
       const allowed = navigation.some((item) => item.key === routedSection);
       const targetSection = allowed ? routedSection : 'overview';
 
-      if (section !== targetSection) {
-        setSection(targetSection);
-        return;
-      }
-
+      setSection(targetSection);
       setPrivateRouteReady(true);
     };
 
@@ -2785,7 +2784,7 @@ export default function App() {
     window.addEventListener('popstate', syncSectionFromPath);
 
     return () => window.removeEventListener('popstate', syncSectionFromPath);
-  }, [isAuthenticated, navigation, section, setSection]);
+  }, [isAuthenticated, navigation, setSection]);
 
   useEffect(() => {
     if (!isAuthenticated || !privateRouteReady) {

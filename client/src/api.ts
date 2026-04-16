@@ -32,6 +32,7 @@ import type {
 const productionApiBaseUrl = 'https://basmet-shabab.runasp.net';
 const authTokenKey = 'team-management-token';
 const unauthorizedEventName = 'basma:unauthorized';
+const isLocalRuntime = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 
 function resolveBaseUrl() {
   const env = import.meta.env as Record<string, string | undefined>;
@@ -154,6 +155,11 @@ function getErrorMessage(error: unknown) {
 
 function shouldRetryWithDirectApi(error: unknown) {
   if (!axios.isAxiosError(error)) {
+    return false;
+  }
+
+  // Avoid expensive fallback retries while developing locally.
+  if (isLocalRuntime) {
     return false;
   }
 
