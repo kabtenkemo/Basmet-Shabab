@@ -5,6 +5,7 @@ using BasmaApi.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Logging;
 
 namespace BasmaApi.Controllers;
 
@@ -14,10 +15,12 @@ namespace BasmaApi.Controllers;
 public sealed class NewsController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
+    private readonly ILogger<NewsController> _logger;
 
-    public NewsController(AppDbContext dbContext)
+    public NewsController(AppDbContext dbContext, ILogger<NewsController> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -38,10 +41,18 @@ public sealed class NewsController : ControllerBase
             .Include(item => item.TargetRoles)
             .Include(item => item.TargetMembers)
             .Where(item => item.AudienceType == NewsAudienceType.All
-                || (item.AudienceType == NewsAudienceType.Roles && item.TargetRoles.Any(target => target.Role == role))
-                || (item.AudienceType == NewsAudienceType.Members && item.TargetMembers.Any(target => target.MemberId == memberId)))
+                || (item.AudienceType == NewsAudienceType.Roles
+                    && (!item.TargetRoles.Any() || item.TargetRoles.Any(target => target.Role == role)))
+                || (item.AudienceType == NewsAudienceType.Members
+                    && (!item.TargetMembers.Any() || item.TargetMembers.Any(target => target.MemberId == memberId))))
             .OrderByDescending(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "News list for {MemberId} role {Role} returned {Count} items.",
+            currentMember.Id,
+            currentMember.Role,
+            news.Count);
 
         return Ok(news.Select(MapNews));
     }

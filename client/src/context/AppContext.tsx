@@ -325,6 +325,9 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       if (newsResult.status === 'fulfilled') {
         setNews(newsResult.value || []);
+        if (import.meta.env.DEV) {
+          console.debug('News loaded:', newsResult.value);
+        }
       }
 
       if (leaderboardResult.status === 'fulfilled') {

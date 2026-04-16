@@ -1009,9 +1009,10 @@ function LeaderboardPage() {
 }
 
 function NewsPage() {
-  const { news, members, canManageNews, createNewsItem } = useApp();
+  const { news, members, canManageNews, createNewsItem, loading } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [newsForm, setNewsForm] = useState<NewsCreateState>(emptyNews);
+  const isLoading = loading && news.length === 0;
 
   const toggleRole = (role: Role) => {
     setNewsForm((current) => ({
@@ -1048,7 +1049,9 @@ function NewsPage() {
       />
 
       <Card title="قائمة الأخبار" subtitle="Visible news">
-        {news.length === 0 ? (
+        {isLoading ? (
+          <EmptyState title="جاري تحميل الأخبار" description="يتم الآن جلب الأخبار من الخادم." />
+        ) : news.length === 0 ? (
           <EmptyState title="لا يوجد أخبار حالياً" description="عند نشر إعلان جديد من الإدارة سيظهر هنا." />
         ) : (
           <div className="space-y-3">
