@@ -302,13 +302,41 @@ public sealed class MembersController : ControllerBase
     [HttpPost("{id:guid}/reset-password")]
     public async Task<IActionResult> ResetPassword(Guid id, CancellationToken cancellationToken)
     {
-        var currentMember = await GetCurrentMemberAsync(cancellationToken);
+        Member? currentMember;
+        try
+        {
+            currentMember = await GetCurrentMemberAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Reset password failed while fetching current member.");
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "تعذر الاتصال بقاعدة البيانات. يرجى المحاولة بعد قليل.",
+                traceId = HttpContext.TraceIdentifier
+            });
+        }
+
         if (currentMember is null)
         {
             return Unauthorized();
         }
 
-        var member = await _dbContext.Members.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        Member? member;
+        try
+        {
+            member = await _dbContext.Members.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Reset password failed while fetching target member {MemberId}.", id);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "تعذر الاتصال بقاعدة البيانات. يرجى المحاولة بعد قليل.",
+                traceId = HttpContext.TraceIdentifier
+            });
+        }
+
         if (member is null)
         {
             return NotFound();
@@ -329,12 +357,28 @@ public sealed class MembersController : ControllerBase
             _logger.LogError(ex, "Cannot reset password for member {MemberId} because default password is not configured.", id);
             return StatusCode(
                 StatusCodes.Status500InternalServerError,
-                new { message = "تعذر إعادة التعيين بسبب إعدادات كلمة المرور الافتراضية. تواصل مع مسؤول النظام." });
+                new
+                {
+                    message = "تعذر إعادة التعيين بسبب إعدادات كلمة المرور الافتراضية. تواصل مع مسؤول النظام.",
+                    traceId = HttpContext.TraceIdentifier
+                });
         }
 
         member.PasswordHash = _passwordService.HashPassword(resetPassword);
         member.MustChangePassword = true;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Reset password failed while saving changes for member {MemberId}.", id);
+            return StatusCode(StatusCodes.Status503ServiceUnavailable, new
+            {
+                message = "تعذر تحديث البيانات في قاعدة البيانات. يرجى المحاولة بعد قليل.",
+                traceId = HttpContext.TraceIdentifier
+            });
+        }
 
         return Ok(new { message = "تم إعادة تعيين كلمة المرور بنجاح وفق إعدادات النظام." });
     }

@@ -156,7 +156,8 @@ public sealed class JoinRequestsController : ControllerBase
             .Include(item => item.ReviewedByMember)
             .AsQueryable();
 
-        if (currentMember.Role == MemberRole.GovernorCoordinator)
+        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident)
+            && currentMember.GovernorateId is not null)
         {
             query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
         }
@@ -195,7 +196,9 @@ public sealed class JoinRequestsController : ControllerBase
             return NotFound();
         }
 
-        if (currentMember.Role == MemberRole.GovernorCoordinator && item.GovernorateId != currentMember.GovernorateId)
+        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident)
+            && currentMember.GovernorateId is not null
+            && item.GovernorateId != currentMember.GovernorateId)
         {
             return Forbid();
         }

@@ -117,6 +117,7 @@ const sectionLabels: Partial<Record<SectionKey, string>> = {
   overview: 'الملخص',
   leaderboard: 'المتصدرين',
   news: 'الأخبار',
+  joinrequests: 'المتقدمين',
   members: 'الأعضاء',
   tasks: 'المهام',
   complaints: 'الشكاوى',
@@ -131,6 +132,7 @@ const navigationSeed: NavigationItem[] = [
   { key: 'overview', label: 'الملخص', icon: 'grid', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'leaderboard', label: 'المتصدرين', icon: 'leaderboard', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'news', label: 'الأخبار', icon: 'news', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
+  { key: 'joinrequests', label: 'المتقدمين', icon: 'requests', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'], permissionKey: 'JoinRequests.Review' },
   { key: 'members', label: 'الأعضاء', icon: 'users', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator'] },
   { key: 'tasks', label: 'المهام', icon: 'check', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'complaints', label: 'الشكاوى', icon: 'message', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
@@ -160,7 +162,15 @@ function sectionAllowed(member: MemberInfo | null, navigationItem: NavigationIte
     return false;
   }
 
-  return navigationItem.roles.includes(member.role);
+  if (!navigationItem.roles.includes(member.role)) {
+    return false;
+  }
+
+  if (navigationItem.permissionKey) {
+    return hasPermission(member, navigationItem.permissionKey);
+  }
+
+  return true;
 }
 
 function mapMemberProfile(profile: DashboardMe): MemberInfo {

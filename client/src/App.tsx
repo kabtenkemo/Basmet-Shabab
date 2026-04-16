@@ -177,6 +177,11 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string; descripti
     title: 'إعلانات وأخبار الكيان',
     description: 'رسائل رسمية من رئيس الكيان أو مساعد الرئيس، موجهة للجميع أو لفئات محددة.'
   },
+  joinrequests: {
+    eyebrow: 'Applicants',
+    title: 'طلبات المتقدمين للانضمام',
+    description: 'متابعة طلبات الانضمام حسب المحافظة مع إمكانية القبول أو الرفض.'
+  },
   members: {
     eyebrow: 'User Management',
     title: 'إدارة الأعضاء والصلاحيات',
@@ -315,6 +320,7 @@ const sectionPathByKey: Record<SectionKey, string> = {
   overview: '/dashbourd',
   leaderboard: '/leaderboard',
   news: '/news',
+  joinrequests: '/join-requests',
   members: '/members',
   tasks: '/tasks',
   complaints: '/complaints',
@@ -331,6 +337,8 @@ const sectionByPath: Record<string, SectionKey> = {
   '/overview': 'overview',
   '/leaderboard': 'leaderboard',
   '/news': 'news',
+  '/join-requests': 'joinrequests',
+  '/joinrequests': 'joinrequests',
   '/members': 'members',
   '/tasks': 'tasks',
   '/complaints': 'complaints',
@@ -1013,23 +1021,9 @@ function LeaderboardPage() {
 }
 
 function NewsPage() {
-  const { news, members, search, canManageNews, canReviewJoinRequests, joinRequests, reviewJoinRequestItem, createNewsItem } = useApp();
+  const { news, members, canManageNews, createNewsItem } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [newsForm, setNewsForm] = useState<NewsCreateState>(emptyNews);
-  const [joinRequestNotes, setJoinRequestNotes] = useState<Record<string, string>>({});
-
-  const filteredJoinRequests = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    return joinRequests.filter((item) => [
-      item.fullName,
-      item.email,
-      item.phoneNumber,
-      item.governorateName,
-      item.committeeName ?? '',
-      item.status,
-      item.assignedToMemberName ?? ''
-    ].join(' ').toLowerCase().includes(normalized));
-  }, [joinRequests, search]);
 
   const toggleRole = (role: Role) => {
     setNewsForm((current) => ({
@@ -1087,7 +1081,89 @@ function NewsPage() {
         )}
       </Card>
 
-      {canReviewJoinRequests && (
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="نشر خبر جديد"
+        subtitle="News publisher"
+        footer={<><Button variant="ghost" onClick={() => setCreateOpen(false)}>إلغاء</Button><Button type="submit" form="news-form"><span className="inline-flex items-center gap-2"><FiSave /> نشر</span></Button></>}
+      >
+        <form id="news-form" className="space-y-4" onSubmit={(event) => void submit(event)}>
+          <Field label="العنوان">
+            <Input value={newsForm.title} onChange={(event) => setNewsForm((current) => ({ ...current, title: event.target.value }))} />
+          </Field>
+          <Field label="المحتوى">
+            <Textarea value={newsForm.content} onChange={(event) => setNewsForm((current) => ({ ...current, content: event.target.value }))} rows={5} />
+          </Field>
+          <Field label="الجمهور">
+            <Select value={newsForm.audienceType} onChange={(event) => setNewsForm((current) => ({ ...current, audienceType: event.target.value as NewsCreateState['audienceType'], targetRoles: [], targetMemberIds: [] }))}>
+              <option value="All">للجميع</option>
+              <option value="Roles">أدوار محددة</option>
+              <option value="Members">أعضاء محددين</option>
+            </Select>
+          </Field>
+
+          {newsForm.audienceType === 'Roles' && (
+            <Field label="اختر الأدوار">
+              <div className="grid gap-2 sm:grid-cols-2">
+                {(['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] as Role[]).map((role) => (
+                  <label key={role} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
+                    <input type="checkbox" checked={newsForm.targetRoles.includes(role)} onChange={() => toggleRole(role)} />
+                    <span>{roleLabel(role)}</span>
+                  </label>
+                ))}
+              </div>
+            </Field>
+          )}
+
+          {newsForm.audienceType === 'Members' && (
+            <Field label="اختر الأعضاء">
+              <div className="max-h-56 space-y-2 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
+                {members.map((member) => (
+                  <label key={member.memberId} className="flex items-center gap-2 text-sm text-slate-200">
+                    <input type="checkbox" checked={newsForm.targetMemberIds.includes(member.memberId)} onChange={() => toggleMember(member.memberId)} />
+                    <span>{member.fullName}</span>
+                  </label>
+                ))}
+              </div>
+            </Field>
+          )}
+        </form>
+      </Modal>
+    </div>
+  );
+}
+
+function JoinRequestsPage() {
+  const { joinRequests, search, canReviewJoinRequests, reviewJoinRequestItem } = useApp();
+  const [joinRequestNotes, setJoinRequestNotes] = useState<Record<string, string>>({});
+
+  const filteredJoinRequests = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    return joinRequests.filter((item) => [
+      item.fullName,
+      item.email,
+      item.phoneNumber,
+      item.governorateName,
+      item.committeeName ?? '',
+      item.status,
+      item.assignedToMemberName ?? ''
+    ].join(' ').toLowerCase().includes(normalized));
+  }, [joinRequests, search]);
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow={pageTitles.joinrequests.eyebrow}
+        title={pageTitles.joinrequests.title}
+        description={pageTitles.joinrequests.description}
+      />
+
+      {!canReviewJoinRequests ? (
+        <Card title="طلبات الالتحاق" subtitle="Join requests">
+          <EmptyState title="لا توجد صلاحية" description="هذا القسم يظهر لمن لديهم صلاحية مراجعة طلبات الالتحاق فقط." />
+        </Card>
+      ) : (
         <Card title="طلبات الالتحاق" subtitle="Join requests routed by governorate">
           {filteredJoinRequests.length === 0 ? (
             <EmptyState title="لا توجد طلبات حالياً" description="عند تقديم طلب جديد سيظهر هنا للمتابعة والمراجعة." />
@@ -1155,56 +1231,6 @@ function NewsPage() {
           )}
         </Card>
       )}
-
-      <Modal
-        open={createOpen}
-        onClose={() => setCreateOpen(false)}
-        title="نشر خبر جديد"
-        subtitle="News publisher"
-        footer={<><Button variant="ghost" onClick={() => setCreateOpen(false)}>إلغاء</Button><Button type="submit" form="news-form"><span className="inline-flex items-center gap-2"><FiSave /> نشر</span></Button></>}
-      >
-        <form id="news-form" className="space-y-4" onSubmit={(event) => void submit(event)}>
-          <Field label="العنوان">
-            <Input value={newsForm.title} onChange={(event) => setNewsForm((current) => ({ ...current, title: event.target.value }))} />
-          </Field>
-          <Field label="المحتوى">
-            <Textarea value={newsForm.content} onChange={(event) => setNewsForm((current) => ({ ...current, content: event.target.value }))} rows={5} />
-          </Field>
-          <Field label="الجمهور">
-            <Select value={newsForm.audienceType} onChange={(event) => setNewsForm((current) => ({ ...current, audienceType: event.target.value as NewsCreateState['audienceType'], targetRoles: [], targetMemberIds: [] }))}>
-              <option value="All">للجميع</option>
-              <option value="Roles">أدوار محددة</option>
-              <option value="Members">أعضاء محددين</option>
-            </Select>
-          </Field>
-
-          {newsForm.audienceType === 'Roles' && (
-            <Field label="اختر الأدوار">
-              <div className="grid gap-2 sm:grid-cols-2">
-                {(['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] as Role[]).map((role) => (
-                  <label key={role} className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-sm text-slate-200">
-                    <input type="checkbox" checked={newsForm.targetRoles.includes(role)} onChange={() => toggleRole(role)} />
-                    <span>{roleLabel(role)}</span>
-                  </label>
-                ))}
-              </div>
-            </Field>
-          )}
-
-          {newsForm.audienceType === 'Members' && (
-            <Field label="اختر الأعضاء">
-              <div className="max-h-56 space-y-2 overflow-auto rounded-2xl border border-white/10 bg-white/5 p-3">
-                {members.map((member) => (
-                  <label key={member.memberId} className="flex items-center gap-2 text-sm text-slate-200">
-                    <input type="checkbox" checked={newsForm.targetMemberIds.includes(member.memberId)} onChange={() => toggleMember(member.memberId)} />
-                    <span>{member.fullName}</span>
-                  </label>
-                ))}
-              </div>
-            </Field>
-          )}
-        </form>
-      </Modal>
     </div>
   );
 }
@@ -2817,6 +2843,7 @@ export default function App() {
     overview: <OverviewPage />,
     leaderboard: <LeaderboardPage />,
     news: <NewsPage />,
+    joinrequests: <JoinRequestsPage />,
     members: <MembersPage />,
     tasks: <TasksPage />,
     complaints: <ComplaintsPage />,

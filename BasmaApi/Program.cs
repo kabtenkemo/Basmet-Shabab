@@ -72,6 +72,7 @@ builder.Services.AddSingleton<IAuditRequestContextAccessor, AuditRequestContextA
 builder.Services.AddScoped<IAuditLogService, AuditLogService>();
 builder.Services.AddScoped<IComplaintEscalationService, ComplaintEscalationService>();
 builder.Services.AddHostedService<ComplaintEscalationWorker>();
+builder.Services.AddHostedService<AuditLogCleanupWorker>();
 
 // FIX: CORS hardened - limit to specific methods and headers
 builder.Services.AddCors(options =>

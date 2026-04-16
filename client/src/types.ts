@@ -10,6 +10,7 @@ export type SectionKey =
   | 'overview'
   | 'leaderboard'
   | 'news'
+  | 'joinrequests'
   | 'members'
   | 'tasks'
   | 'complaints'
@@ -332,4 +333,5 @@ export type NavigationItem = {
   label: string;
   icon: string;
   roles: Role[];
+  permissionKey?: string;
 };
