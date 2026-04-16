@@ -47,6 +47,12 @@ public sealed class JoinRequestsController : ControllerBase
             return BadRequest(new { message = "رقم الهاتف مطلوب ويجب أن يكون صحيحًا." });
         }
 
+        var nationalId = request.NationalId.Trim();
+        if (nationalId.Length != 14 || nationalId.Any(character => character < '0' || character > '9'))
+        {
+            return BadRequest(new { message = "الرقم القومي مطلوب ويجب أن يكون 14 رقمًا." });
+        }
+
         if (string.IsNullOrWhiteSpace(request.Motivation) || request.Motivation.Trim().Length < 20)
         {
             return BadRequest(new { message = "اكتب نبذة مناسبة عن سبب الانضمام لا تقل عن 20 حرفًا." });
@@ -84,6 +90,15 @@ public sealed class JoinRequestsController : ControllerBase
             return Conflict(new { message = "يوجد طلب التحاق مفتوح بالفعل بنفس البريد الإلكتروني في هذه المحافظة." });
         }
 
+        var duplicateNationalIdPendingRequest = await _dbContext.TeamJoinRequests.AnyAsync(
+            item => item.NationalId == nationalId && item.GovernorateId == request.GovernorateId && item.Status == JoinRequestStatus.Pending,
+            cancellationToken);
+
+        if (duplicateNationalIdPendingRequest)
+        {
+            return Conflict(new { message = "يوجد طلب التحاق مفتوح بالفعل بنفس الرقم القومي في هذه المحافظة." });
+        }
+
         var assignedCoordinator = await _dbContext.Members
             .AsNoTracking()
             .Where(member => member.Role == MemberRole.GovernorCoordinator && member.GovernorateId == request.GovernorateId)
@@ -95,7 +110,7 @@ public sealed class JoinRequestsController : ControllerBase
             FullName = request.FullName.Trim(),
             Email = normalizedEmail,
             PhoneNumber = request.PhoneNumber.Trim(),
-            NationalId = string.IsNullOrWhiteSpace(request.NationalId) ? null : request.NationalId.Trim(),
+            NationalId = nationalId,
             BirthDate = request.BirthDate,
             GovernorateId = governorate.Id,
             CommitteeId = committee?.Id,

@@ -220,7 +220,7 @@ export async function login(email: string, password: string) {
   return request<AuthResponse>({
     method: 'POST',
     url: '/api/auth/login',
-    data: { email: email.trim(), password: password.trim() }
+    data: { email: email.trim(), password }
   });
 }
 
@@ -277,7 +277,7 @@ export async function createJoinRequest(form: TeamJoinRequestCreateState) {
       fullName: form.fullName.trim(),
       email: form.email.trim().toLowerCase(),
       phoneNumber: form.phoneNumber.trim(),
-      nationalId: form.nationalId.trim() || null,
+      nationalId: form.nationalId.trim(),
       birthDate: form.birthDate || null,
       governorateId: form.governorateId,
       committeeId: form.committeeId || null,

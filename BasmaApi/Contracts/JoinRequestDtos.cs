@@ -1,21 +1,29 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace BasmaApi.Contracts;
 
 public sealed class TeamJoinRequestCreateRequest
 {
+    [Required]
     public string FullName { get; init; } = string.Empty;
 
+    [Required]
     public string Email { get; init; } = string.Empty;
 
+    [Required]
     public string PhoneNumber { get; init; } = string.Empty;
 
-    public string? NationalId { get; init; }
+    [Required, RegularExpression(@"^[0-9]{14}$")]
+    public string NationalId { get; init; } = string.Empty;
 
     public DateOnly? BirthDate { get; init; }
 
+    [Required]
     public Guid GovernorateId { get; init; }
 
     public Guid? CommitteeId { get; init; }
 
+    [Required]
     public string Motivation { get; init; } = string.Empty;
 
     public string? Experience { get; init; }

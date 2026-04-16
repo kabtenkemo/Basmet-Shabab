@@ -104,7 +104,7 @@ public sealed class AuthController : ControllerBase
 
         try
         {
-            var passwordVerified = _passwordService.VerifyPassword(request.Password, member.PasswordHash);
+            var passwordVerified = await VerifyAndUpgradePasswordAsync(member, request.Password, cancellationToken);
             if (!passwordVerified)
             {
                 await LogFailedLogin(email, GetClientIpAddress(), "كلمة سر غير صحيحة", cancellationToken);
@@ -144,6 +144,25 @@ public sealed class AuthController : ControllerBase
             member.MustChangePassword,
             token,
             expiresAtUtc));
+    }
+
+    private async Task<bool> VerifyAndUpgradePasswordAsync(Member member, string rawPassword, CancellationToken cancellationToken)
+    {
+        if (_passwordService.VerifyPassword(rawPassword, member.PasswordHash))
+        {
+            return true;
+        }
+
+        // Compatibility path: if an old record stored a plain-text password, upgrade it after first successful login.
+        if (string.Equals(member.PasswordHash, rawPassword, StringComparison.Ordinal))
+        {
+            member.PasswordHash = _passwordService.HashPassword(rawPassword);
+            member.MustChangePassword = true;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return true;
+        }
+
+        return false;
     }
 
     private async Task LogFailedLogin(string email, string ipAddress, string reason, CancellationToken cancellationToken)

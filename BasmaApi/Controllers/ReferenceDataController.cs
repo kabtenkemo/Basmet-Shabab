@@ -15,6 +15,37 @@ public sealed class ReferenceDataController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
 
+    private static readonly string[] DefaultGovernorateNames =
+    {
+        "القاهرة",
+        "الإسكندرية",
+        "الجيزة",
+        "القليوبية",
+        "الشرقية",
+        "الغربية",
+        "المنوفية",
+        "الدقهلية",
+        "البحيرة",
+        "كفر الشيخ",
+        "دمياط",
+        "بورسعيد",
+        "السويس",
+        "الإسماعيلية",
+        "شمال سيناء",
+        "جنوب سيناء",
+        "الفيوم",
+        "بني سويف",
+        "المنيا",
+        "أسيوط",
+        "سوهاج",
+        "قنا",
+        "الأقصر",
+        "أسوان",
+        "البحر الأحمر",
+        "الوادي الجديد",
+        "مطروح"
+    };
+
     public ReferenceDataController(AppDbContext dbContext)
     {
         _dbContext = dbContext;
@@ -24,6 +55,8 @@ public sealed class ReferenceDataController : ControllerBase
     [HttpGet]
     public async Task<ActionResult<IEnumerable<GovernorateResponse>>> GetGovernorates(CancellationToken cancellationToken)
     {
+        await EnsureGovernoratesSeededAsync(cancellationToken);
+
         var governorates = await _dbContext.Governorates
             .AsNoTracking()
             .OrderBy(governorate => governorate.Name)
@@ -99,6 +132,39 @@ public sealed class ReferenceDataController : ControllerBase
             governorate.Name,
             committee.Name,
             committee.CreatedAtUtc));
+    }
+
+    private async Task EnsureGovernoratesSeededAsync(CancellationToken cancellationToken)
+    {
+        var existingNames = await _dbContext.Governorates
+            .AsNoTracking()
+            .Select(governorate => governorate.Name)
+            .ToListAsync(cancellationToken);
+
+        var knownNames = new HashSet<string>(existingNames, StringComparer.OrdinalIgnoreCase);
+        var missingGovernorates = DefaultGovernorateNames
+            .Where(name => !knownNames.Contains(name))
+            .ToList();
+
+        if (missingGovernorates.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var governorateName in missingGovernorates)
+        {
+            _dbContext.Governorates.Add(new Governorate { Name = governorateName });
+        }
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            // Another request may have seeded data concurrently.
+            _dbContext.ChangeTracker.Clear();
+        }
     }
 
     private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)

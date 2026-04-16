@@ -2,7 +2,6 @@ using BasmaApi.Contracts;
 using BasmaApi.Data;
 using BasmaApi.Models;
 using BasmaApi.Services;
-using BCrypt.Net;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -15,10 +14,12 @@ namespace BasmaApi.Controllers;
 public sealed class MembersController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
+    private readonly IPasswordService _passwordService;
 
-    public MembersController(AppDbContext dbContext)
+    public MembersController(AppDbContext dbContext, IPasswordService passwordService)
     {
         _dbContext = dbContext;
+        _passwordService = passwordService;
     }
 
     [HttpGet("me")]
@@ -151,7 +152,7 @@ public sealed class MembersController : ControllerBase
             GovernorName = scopeResult.GovernorName,
             CommitteeName = scopeResult.CommitteeName,
             CreatedByMemberId = currentMember.Id,
-            PasswordHash = BCrypt.Net.BCrypt.HashPassword("Test123.", 12),  // Default password: Test123.
+            PasswordHash = _passwordService.HashPassword("Test123."),
             MustChangePassword = true
         };
 
@@ -295,7 +296,7 @@ public sealed class MembersController : ControllerBase
         }
 
         // Reset password to default: Test123.
-        member.PasswordHash = BCrypt.Net.BCrypt.HashPassword("Test123.", 12);
+        member.PasswordHash = _passwordService.HashPassword("Test123.");
         member.MustChangePassword = true;
         await _dbContext.SaveChangesAsync(cancellationToken);
 

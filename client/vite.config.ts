@@ -8,7 +8,7 @@ export default defineConfig({
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://basmet-shabab.runasp.net',
+        target: 'https://basmet-shabab.runasp.net',
         changeOrigin: true,
         secure: false
       }

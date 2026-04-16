@@ -683,7 +683,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       appendActivity('مراجعة طلب الالتحاق', `تم حفظ الطلب على حالة ${review.status}`, 'success');
       await loadSession();
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'ØªØ¹Ø°Ø± Ø­ÙØ¸ Ù…Ø±Ø§Ø¬Ø¹Ø© Ø§Ù„Ø·Ù„Ø¨');
+      setError(actionError instanceof Error ? actionError.message : 'تعذر حفظ مراجعة الطلب');
       throw actionError;
     } finally {
       setLoading(false);

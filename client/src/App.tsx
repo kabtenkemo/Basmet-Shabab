@@ -390,7 +390,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
     setFormError('');
 
     const trimmedEmail = email.trim();
-    const trimmedPassword = password.trim();
+    const rawPassword = password;
 
     // Validate inputs
     if (!trimmedEmail) {
@@ -403,13 +403,8 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
       return;
     }
 
-    if (!trimmedPassword) {
+    if (!rawPassword) {
       setFormError('كلمة المرور مطلوبة.');
-      return;
-    }
-
-    if (trimmedPassword.length < 6) {
-      setFormError('كلمة المرور قصيرة جدًا (يجب أن تكون 6 أحرف على الأقل).');
       return;
     }
 
@@ -420,7 +415,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
         localStorage.removeItem('basma-remembered-email');
       }
 
-      await loginUser(trimmedEmail, trimmedPassword);
+      await loginUser(trimmedEmail, rawPassword);
     } catch {
       // Errors are handled in AppContext
     }
@@ -485,7 +480,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
               />
             </Field>
 
-            <Field label="كلمة المرور" hint="6 أحرف على الأقل - حساسة لحالة الأحرف">
+            <Field label="كلمة المرور" hint="حساسة لحالة الأحرف">
               <Input
                 value={password}
                 onChange={(event) => {
@@ -581,6 +576,7 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
   const [joinGovernorates, setJoinGovernorates] = useState<GovernorateOption[]>([]);
   const [joinCommittees, setJoinCommittees] = useState<CommitteeOption[]>([]);
   const [joinLoading, setJoinLoading] = useState(false);
+  const [joinGovernoratesLoading, setJoinGovernoratesLoading] = useState(false);
   const [joinError, setJoinError] = useState('');
   const [joinSuccess, setJoinSuccess] = useState('');
 
@@ -588,14 +584,23 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     let cancelled = false;
 
     const loadGovernorates = async () => {
+      setJoinGovernoratesLoading(true);
+      setJoinError('');
       try {
         const data = await getGovernorates();
         if (!cancelled) {
           setJoinGovernorates(data);
+          if (data.length === 0) {
+            setJoinError('لا توجد محافظات متاحة حاليًا. يرجى التواصل مع الإدارة لإضافة بيانات المحافظات.');
+          }
         }
       } catch {
         if (!cancelled) {
           setJoinError('تعذر تحميل المحافظات حاليًا. حاول مرة أخرى بعد قليل.');
+        }
+      } finally {
+        if (!cancelled) {
+          setJoinGovernoratesLoading(false);
         }
       }
     };
@@ -639,9 +644,15 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     event.preventDefault();
     setJoinError('');
     setJoinSuccess('');
+    const normalizedNationalId = joinForm.nationalId.replace(/\s+/g, '');
 
-    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.motivation.trim()) {
-      setJoinError('املأ الاسم والبريد والهاتف والمحافظة وسبب الانضمام قبل الإرسال.');
+    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.motivation.trim() || !normalizedNationalId) {
+      setJoinError('املأ الاسم والبريد والهاتف والرقم القومي والمحافظة وسبب الانضمام قبل الإرسال.');
+      return;
+    }
+
+    if (normalizedNationalId.length !== 14 || /[^0-9]/.test(normalizedNationalId)) {
+      setJoinError('الرقم القومي يجب أن يكون 14 رقمًا.');
       return;
     }
 
@@ -671,14 +682,14 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
         <Card title="التقديم على التيم" subtitle="Join request">
           <form className="space-y-4" onSubmit={submitJoin}>
             <Field label="الاسم رباعي">
-              <Input value={joinForm.fullName} onChange={(event) => setJoinForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="الاسم الكامل" disabled={joinLoading} />
+              <Input value={joinForm.fullName} onChange={(event) => setJoinForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="الاسم الكامل" disabled={joinLoading} required />
             </Field>
             <div className="grid gap-4 sm:grid-cols-2">
               <Field label="البريد الإلكتروني">
-                <Input value={joinForm.email} onChange={(event) => setJoinForm((current) => ({ ...current, email: event.target.value }))} type="email" placeholder="name@example.com" disabled={joinLoading} />
+                <Input value={joinForm.email} onChange={(event) => setJoinForm((current) => ({ ...current, email: event.target.value }))} type="email" placeholder="name@example.com" disabled={joinLoading} required />
               </Field>
               <Field label="رقم الهاتف">
-                <Input value={joinForm.phoneNumber} onChange={(event) => setJoinForm((current) => ({ ...current, phoneNumber: event.target.value }))} inputMode="tel" placeholder="01xxxxxxxxx" disabled={joinLoading} />
+                <Input value={joinForm.phoneNumber} onChange={(event) => setJoinForm((current) => ({ ...current, phoneNumber: event.target.value }))} inputMode="tel" placeholder="01xxxxxxxxx" disabled={joinLoading} required />
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -686,9 +697,10 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
                 <Select
                   value={joinForm.governorateId}
                   onChange={(event) => setJoinForm((current) => ({ ...current, governorateId: event.target.value, committeeId: '' }))}
-                  disabled={joinLoading}
+                  disabled={joinLoading || joinGovernoratesLoading}
+                  required
                 >
-                  <option value="">اختر المحافظة</option>
+                  <option value="">{joinGovernoratesLoading ? 'جارٍ تحميل المحافظات...' : 'اختر المحافظة'}</option>
                   {joinGovernorates.map((governorate) => <option key={governorate.governorateId} value={governorate.governorateId}>{governorate.name}</option>)}
                 </Select>
               </Field>
@@ -704,11 +716,11 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
               </Field>
             </div>
             <div className="grid gap-4 sm:grid-cols-2">
-              <Field label="الرقم القومي">
+              <Field label="الرقم القومي" hint="إجباري - 14 رقمًا">
                 <Input
                   value={joinForm.nationalId}
                   onChange={(event) => {
-                    const nationalId = event.target.value;
+                    const nationalId = event.target.value.replace(/\D/g, '').slice(0, 14);
                     setJoinForm((current) => ({
                       ...current,
                       nationalId,
@@ -716,8 +728,11 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
                     }));
                   }}
                   inputMode="numeric"
+                  required
+                  minLength={14}
                   maxLength={14}
-                  placeholder="اختياري"
+                  pattern="[0-9]{14}"
+                  placeholder="14 رقمًا"
                   disabled={joinLoading}
                 />
               </Field>
@@ -726,7 +741,7 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
               </Field>
             </div>
             <Field label="سبب الانضمام">
-              <Textarea value={joinForm.motivation} onChange={(event) => setJoinForm((current) => ({ ...current, motivation: event.target.value }))} rows={4} placeholder="اكتب لماذا تريد الانضمام وكيف ستفيد الفريق" disabled={joinLoading} />
+              <Textarea value={joinForm.motivation} onChange={(event) => setJoinForm((current) => ({ ...current, motivation: event.target.value }))} rows={4} placeholder="اكتب لماذا تريد الانضمام وكيف ستفيد الفريق" disabled={joinLoading} required />
             </Field>
             <Field label="الخبرات السابقة">
               <Textarea value={joinForm.experience} onChange={(event) => setJoinForm((current) => ({ ...current, experience: event.target.value }))} rows={3} placeholder="اختياري" disabled={joinLoading} />
@@ -1469,7 +1484,7 @@ function MembersPage() {
         open={createOpen}
         onClose={() => { setCreateOpen(false); setMemberFormError(''); }}
         title="إنشاء حساب داخلي"
-        subtitle="Default password: 123"
+        subtitle="Default password: Test123."
         footer={<><Button variant="ghost" onClick={() => { setCreateOpen(false); setMemberFormError(''); }}><span className="inline-flex items-center gap-2"><FiArrowLeft /> إلغاء</span></Button><Button type="submit" form="member-create-form"><span className="inline-flex items-center gap-2"><FiSave /> إنشاء</span></Button></>}
       >
         <form id="member-create-form" className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void saveMember(event)}>
