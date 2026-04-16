@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent, type ReactElement } from 'react';
 import { FiActivity, FiArrowLeft, FiClock, FiDownload, FiEdit3, FiPlus, FiPrinter, FiSave, FiSend, FiTrash2, FiThumbsUp, FiThumbsDown, FiUserPlus } from 'react-icons/fi';
-import * as XLSX from 'xlsx';
 import { AppShell } from './components/AppShell';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PagedTable, Select, SectionTitle, StatCard, Textarea, type TableColumn } from './components/ui';
 import { useApp } from './context/AppContext';
@@ -307,20 +306,25 @@ function loginTitle() {
   return 'تسجيل الدخول إلى منصة بصمة شباب';
 }
 
-function LoginView() {
-  const { loginUser, loading, error, clearError, submitJoinRequest } = useApp();
+type PublicRoute = 'login' | 'join';
+
+function resolvePublicRoute(): PublicRoute {
+  if (typeof window === 'undefined') {
+    return 'login';
+  }
+
+  const hash = window.location.hash.toLowerCase();
+  return hash === '#/join' ? 'join' : 'login';
+}
+
+function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
+  const { loginUser, loading, error, clearError } = useApp();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [formError, setFormError] = useState('');
   const [capsLockDetected, setCapsLockDetected] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [rememberEmail, setRememberEmail] = useState(true);
-  const [joinForm, setJoinForm] = useState<TeamJoinRequestCreateState>(emptyJoinRequest);
-  const [joinGovernorates, setJoinGovernorates] = useState<GovernorateOption[]>([]);
-  const [joinCommittees, setJoinCommittees] = useState<CommitteeOption[]>([]);
-  const [joinLoading, setJoinLoading] = useState(false);
-  const [joinError, setJoinError] = useState('');
-  const [joinSuccess, setJoinSuccess] = useState('');
 
   useEffect(() => {
     clearError();
@@ -333,117 +337,10 @@ function LoginView() {
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadGovernorates = async () => {
-      try {
-        const data = await getGovernorates();
-        if (!cancelled) {
-          setJoinGovernorates(data);
-        }
-      } catch {
-        if (!cancelled) {
-          setJoinError('تعذر تحميل المحافظات حاليًا. حاول مرة أخرى بعد قليل.');
-        }
-      }
-    };
-
-    void loadGovernorates();
-
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    const loadCommittees = async () => {
-      if (!joinForm.governorateId) {
-        setJoinCommittees([]);
-        return;
-      }
-
-      try {
-        const data = await getGovernorateCommittees(joinForm.governorateId);
-        if (!cancelled) {
-          setJoinCommittees(data);
-        }
-      } catch {
-        if (!cancelled) {
-          setJoinCommittees([]);
-        }
-      }
-    };
-
-    void loadCommittees();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [joinForm.governorateId]);
-
   const validateEmail = (value: string): boolean => {
     // Basic email validation
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(value.trim());
-  };
-
-  const getErrorDetails = (errorMsg: string): { title: string; hint: string } => {
-    // Parse error messages to provide helpful hints
-    if (!errorMsg) return { title: '', hint: '' };
-
-    if (errorMsg.includes('غير صحيح') || errorMsg.includes('غير موجود')) {
-      return {
-        title: '❌ البيانات غير صحيحة',
-        hint: 'تأكد من صحة البريد الإلكتروني وكلمة المرور. الحسابات حساسة لحالة الأحرف (Lowercase).'
-      };
-    }
-
-    if (errorMsg.includes('الاتصال') || errorMsg.includes('الشبكة')) {
-      return {
-        title: '🌐 مشكلة في الاتصال',
-        hint: 'تحقق من اتصالك بالإنترنت. جاري المحاولة مرة أخرى تلقائياً...'
-      };
-    }
-
-    if (errorMsg.includes('مهلة') || errorMsg.includes('timeout')) {
-      return {
-        title: '⏳ الخادم بطيء',
-        hint: 'الخادم يستغرق وقتاً أطول من المتوقع. حاول بعد قليل.'
-      };
-    }
-
-    if (errorMsg.includes('خطأ في الخادم')) {
-      return {
-        title: '⚠️ خطأ في الخادم',
-        hint: 'حدث خطأ تقني. يرجى محاولة لاحقاً أو التواصل مع الدعم الفني.'
-      };
-    }
-
-    if (errorMsg.includes('مطلوبة') || errorMsg.includes('مطلوبان')) {
-      return {
-        title: '📝 حقول ناقصة',
-        hint: 'الرجاء ملء البريد الإلكتروني وكلمة المرور.'
-      };
-    }
-
-    if (errorMsg.includes('صيغة') || errorMsg.includes('صحيح')) {
-      return {
-        title: '✉️ البريد غير صحيح',
-        hint: 'استخدم البريد الإلكتروني الكامل (مثال: president@basmet.local)'
-      };
-    }
-
-    if (errorMsg.includes('قصير') || errorMsg.includes('6 أحرف')) {
-      return {
-        title: '🔐 كلمة السر ضعيفة',
-        hint: 'كلمة السر يجب أن تكون 6 أحرف على الأقل.'
-      };
-    }
-
-    return { title: '❌ خطأ', hint: errorMsg };
   };
 
   const getLoginFeedback = (message: string): { title: string; hint: string; tone: 'danger' | 'warning' } => {
@@ -526,29 +423,6 @@ function LoginView() {
       await loginUser(trimmedEmail, trimmedPassword);
     } catch {
       // Errors are handled in AppContext
-    }
-  };
-
-  const submitJoin = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setJoinError('');
-    setJoinSuccess('');
-
-    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.motivation.trim()) {
-      setJoinError('املأ الاسم والبريد والهاتف والمحافظة وسبب الانضمام قبل الإرسال.');
-      return;
-    }
-
-    setJoinLoading(true);
-    try {
-      const created = await submitJoinRequest(joinForm);
-      setJoinSuccess(`تم إرسال طلبك إلى منسق محافظة ${created.governorateName}${created.assignedToMemberName ? ` (${created.assignedToMemberName})` : ''}.`);
-      setJoinForm(emptyJoinRequest);
-      setJoinCommittees([]);
-    } catch (joinSubmitError) {
-      setJoinError(joinSubmitError instanceof Error ? joinSubmitError.message : 'تعذر إرسال الطلب حاليًا.');
-    } finally {
-      setJoinLoading(false);
     }
   };
 
@@ -676,6 +550,13 @@ function LoginView() {
           </form>
 
           <div className="mt-6 space-y-3">
+            <Button variant="secondary" className="w-full" onClick={onNavigateToJoin}>
+              <span className="inline-flex items-center gap-2">
+                <FiUserPlus />
+                التقديم على التيم
+              </span>
+            </Button>
+
             <div className="rounded-3xl border border-white/10 bg-white/5 p-4 text-sm leading-7 text-slate-300">
               <p className="font-semibold text-white mb-2">ملاحظات مهمة:</p>
               <ul className="list-inside space-y-1">
@@ -687,6 +568,105 @@ function LoginView() {
 
           </div>
         </Card>
+
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
+  const { submitJoinRequest } = useApp();
+  const [joinForm, setJoinForm] = useState<TeamJoinRequestCreateState>(emptyJoinRequest);
+  const [joinGovernorates, setJoinGovernorates] = useState<GovernorateOption[]>([]);
+  const [joinCommittees, setJoinCommittees] = useState<CommitteeOption[]>([]);
+  const [joinLoading, setJoinLoading] = useState(false);
+  const [joinError, setJoinError] = useState('');
+  const [joinSuccess, setJoinSuccess] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadGovernorates = async () => {
+      try {
+        const data = await getGovernorates();
+        if (!cancelled) {
+          setJoinGovernorates(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setJoinError('تعذر تحميل المحافظات حاليًا. حاول مرة أخرى بعد قليل.');
+        }
+      }
+    };
+
+    void loadGovernorates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadCommittees = async () => {
+      if (!joinForm.governorateId) {
+        setJoinCommittees([]);
+        return;
+      }
+
+      try {
+        const data = await getGovernorateCommittees(joinForm.governorateId);
+        if (!cancelled) {
+          setJoinCommittees(data);
+        }
+      } catch {
+        if (!cancelled) {
+          setJoinCommittees([]);
+        }
+      }
+    };
+
+    void loadCommittees();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [joinForm.governorateId]);
+
+  const submitJoin = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setJoinError('');
+    setJoinSuccess('');
+
+    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.motivation.trim()) {
+      setJoinError('املأ الاسم والبريد والهاتف والمحافظة وسبب الانضمام قبل الإرسال.');
+      return;
+    }
+
+    setJoinLoading(true);
+    try {
+      const created = await submitJoinRequest(joinForm);
+      setJoinSuccess(`تم إرسال طلبك إلى منسق محافظة ${created.governorateName}${created.assignedToMemberName ? ` (${created.assignedToMemberName})` : ''}.`);
+      setJoinForm(emptyJoinRequest);
+      setJoinCommittees([]);
+    } catch (joinSubmitError) {
+      setJoinError(joinSubmitError instanceof Error ? joinSubmitError.message : 'تعذر إرسال الطلب حاليًا.');
+    } finally {
+      setJoinLoading(false);
+    }
+  };
+
+  return (
+    <main className="grid min-h-screen place-items-center px-6 py-10 sm:px-10 lg:px-12">
+      <div className="w-full max-w-3xl space-y-5">
+        <Button variant="ghost" onClick={onBackToLogin}>
+          <span className="inline-flex items-center gap-2">
+            <FiArrowLeft />
+            العودة لتسجيل الدخول
+          </span>
+        </Button>
 
         <Card title="التقديم على التيم" subtitle="Join request">
           <form className="space-y-4" onSubmit={submitJoin}>
@@ -763,8 +743,7 @@ function LoginView() {
             </Button>
           </form>
         </Card>
-        </div>
-      </section>
+      </div>
     </main>
   );
 }
@@ -2375,7 +2354,8 @@ function SuggestionsPage() {
 function ReportsPage() {
   const { dashboard, members, tasks, complaints, activityLogs } = useApp();
 
-  const downloadSheet = (filename: string, sheetName: string, rows: string[][]) => {
+  const downloadSheet = async (filename: string, sheetName: string, rows: string[][]) => {
+    const XLSX = await import('xlsx');
     const workbook = XLSX.utils.book_new();
     const worksheet = XLSX.utils.aoa_to_sheet(rows);
     XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
@@ -2398,13 +2378,13 @@ function ReportsPage() {
 
       <Card title="التصدير" subtitle="Export tools" actions={<Button variant="secondary" onClick={() => window.print()}><span className="inline-flex items-center gap-2"><FiPrinter /> طباعة / PDF</span></Button>}>
         <div className="flex flex-wrap gap-3">
-          <Button onClick={() => downloadSheet('الأعضاء.xlsx', 'الأعضاء', [['الاسم', 'البريد', 'الرقم القومي', 'تاريخ الميلاد', 'الدور', 'النقاط'], ...members.map((member) => [member.fullName, member.email, member.nationalId ?? '', member.birthDate ? formatDateOnly(member.birthDate) : '', roleLabel(member.role), String(member.points)])])}>
+          <Button onClick={() => void downloadSheet('الأعضاء.xlsx', 'الأعضاء', [['الاسم', 'البريد', 'الرقم القومي', 'تاريخ الميلاد', 'الدور', 'النقاط'], ...members.map((member) => [member.fullName, member.email, member.nationalId ?? '', member.birthDate ? formatDateOnly(member.birthDate) : '', roleLabel(member.role), String(member.points)])])}>
             <span className="inline-flex items-center gap-2"><FiDownload /> تصدير الأعضاء</span>
           </Button>
-          <Button variant="secondary" onClick={() => downloadSheet('المهام.xlsx', 'المهام', [['العنوان', 'الوصف', 'الحالة'], ...tasks.map((task) => [task.title, task.description ?? '', task.isCompleted ? 'مكتملة' : 'قيد التنفيذ'])])}>
+          <Button variant="secondary" onClick={() => void downloadSheet('المهام.xlsx', 'المهام', [['العنوان', 'الوصف', 'الحالة'], ...tasks.map((task) => [task.title, task.description ?? '', task.isCompleted ? 'مكتملة' : 'قيد التنفيذ'])])}>
             <span className="inline-flex items-center gap-2"><FiDownload /> تصدير المهام</span>
           </Button>
-          <Button variant="secondary" onClick={() => downloadSheet('الشكاوى.xlsx', 'الشكاوى', [['الموضوع', 'مقدم الشكوى', 'الرد الإداري', 'الحالة'], ...complaints.map((item) => [item.subject, item.memberName, item.adminReply ?? '', statusLabel(item.status)])])}>
+          <Button variant="secondary" onClick={() => void downloadSheet('الشكاوى.xlsx', 'الشكاوى', [['الموضوع', 'مقدم الشكوى', 'الرد الإداري', 'الحالة'], ...complaints.map((item) => [item.subject, item.memberName, item.adminReply ?? '', statusLabel(item.status)])])}>
             <span className="inline-flex items-center gap-2"><FiDownload /> تصدير الشكاوى</span>
           </Button>
         </div>
@@ -2664,13 +2644,39 @@ function ProfilePage() {
 
 export default function App() {
   const { isAuthenticated, section, clearError } = useApp();
+  const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => resolvePublicRoute());
 
   useEffect(() => {
     clearError();
   }, [clearError]);
 
+  useEffect(() => {
+    const onHashChange = () => {
+      setPublicRoute(resolvePublicRoute());
+    };
+
+    window.addEventListener('hashchange', onHashChange);
+    return () => window.removeEventListener('hashchange', onHashChange);
+  }, []);
+
+  const goToPublicRoute = (route: PublicRoute) => {
+    if (route === 'join') {
+      window.location.hash = '/join';
+      return;
+    }
+
+    if (window.location.hash) {
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    }
+    setPublicRoute('login');
+  };
+
   if (!isAuthenticated) {
-    return <LoginView />;
+    if (publicRoute === 'join') {
+      return <JoinRequestView onBackToLogin={() => goToPublicRoute('login')} />;
+    }
+
+    return <LoginView onNavigateToJoin={() => goToPublicRoute('join')} />;
   }
 
   const content: Record<SectionKey, ReactElement> = {

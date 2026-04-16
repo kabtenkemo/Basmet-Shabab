@@ -31,6 +31,7 @@ import type {
 
 const productionApiBaseUrl = 'https://basmet-shabab.runasp.net';
 const authTokenKey = 'team-management-token';
+const unauthorizedEventName = 'basma:unauthorized';
 
 function resolveBaseUrl() {
   const env = import.meta.env as Record<string, string | undefined>;
@@ -67,8 +68,14 @@ function attachInterceptors(instance: ReturnType<typeof axios.create>) {
     (response) => response,
     (error) => {
       if (error.response?.status === 401) {
+        const requestUrl = String(error.config?.url ?? '').toLowerCase();
+        const isLoginRequest = requestUrl.includes('/api/auth/login');
+
         localStorage.removeItem(authTokenKey);
-        window.location.href = '/';
+
+        if (!isLoginRequest && typeof window !== 'undefined') {
+          window.dispatchEvent(new CustomEvent(unauthorizedEventName));
+        }
       }
 
       return Promise.reject(error);
@@ -203,6 +210,10 @@ export function setStoredToken(token: string | null) {
 
 export function getStoredToken() {
   return localStorage.getItem(authTokenKey);
+}
+
+export function getUnauthorizedEventName() {
+  return unauthorizedEventName;
 }
 
 export async function login(email: string, password: string) {

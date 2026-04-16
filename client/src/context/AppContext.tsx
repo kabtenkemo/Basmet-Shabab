@@ -17,6 +17,7 @@ import {
   getMyComplaints,
   getNews,
   getStoredToken,
+  getUnauthorizedEventName,
   getTasks,
   grantPermission,
   grantRole,
@@ -461,6 +462,28 @@ export function AppProvider({ children }: PropsWithChildren) {
     appendActivity('تسجيل الخروج', 'تمت مغادرة الجلسة الحالية', 'warning');
   }, [appendActivity]);
 
+  useEffect(() => {
+    const unauthorizedEventName = getUnauthorizedEventName();
+    const handleUnauthorized = () => {
+      setToken(null);
+      setStoredToken(null);
+      setUser(null);
+      setDashboard(null);
+      setMembers([]);
+      setTasks([]);
+      setComplaints([]);
+      setJoinRequests([]);
+      setNews([]);
+      setMyComplaints([]);
+      setSection('overview');
+      setSearch('');
+      setError('انتهت الجلسة. يرجى تسجيل الدخول مرة أخرى.');
+    };
+
+    window.addEventListener(unauthorizedEventName, handleUnauthorized);
+    return () => window.removeEventListener(unauthorizedEventName, handleUnauthorized);
+  }, []);
+
   const createMemberItem = useCallback(async (form: MemberCreateFormState) => {
     setLoading(true);
     setError('');
@@ -612,17 +635,13 @@ export function AppProvider({ children }: PropsWithChildren) {
   }, [appendActivity, loadSession]);
 
   const submitJoinRequest = useCallback(async (form: TeamJoinRequestCreateState) => {
-    setLoading(true);
-    setError('');
     try {
       const created = await createJoinRequest(form);
-      appendActivity('Ø·Ù„Ø¨ Ø§Ù„Ø§Ù„ØªØ­Ø§Ù‚', `ØªÙ… Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ ${created.fullName} Ø¥Ù„Ù‰ ${created.governorateName}`, 'success');
+      appendActivity('طلب الالتحاق', `تم إرسال طلب ${created.fullName} إلى ${created.governorateName}`, 'success');
       return created;
     } catch (actionError) {
-      setError(actionError instanceof Error ? actionError.message : 'ØªØ¹Ø°Ø± Ø¥Ø±Ø³Ø§Ù„ Ø·Ù„Ø¨ Ø§Ù„Ø§Ù„ØªØ­Ø§Ù‚');
+      setError(actionError instanceof Error ? actionError.message : 'تعذر إرسال طلب الالتحاق');
       throw actionError;
-    } finally {
-      setLoading(false);
     }
   }, [appendActivity]);
 
@@ -661,7 +680,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setError('');
     try {
       await reviewJoinRequest(id, review);
-      appendActivity('Ù…Ø±Ø§Ø¬Ø¹Ø© Ø·Ù„Ø¨ Ø§Ù„Ø§Ù„ØªØ­Ø§Ù‚', `ØªÙ… Ø­ÙØ¸ Ø§Ù„Ø·Ù„Ø¨ Ø¹Ù„Ù‰ Ø­Ø§Ù„Ø© ${review.status}`, 'success');
+      appendActivity('مراجعة طلب الالتحاق', `تم حفظ الطلب على حالة ${review.status}`, 'success');
       await loadSession();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'ØªØ¹Ø°Ø± Ø­ÙØ¸ Ù…Ø±Ø§Ø¬Ø¹Ø© Ø§Ù„Ø·Ù„Ø¨');
