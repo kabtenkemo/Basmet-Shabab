@@ -571,7 +571,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setError('');
     try {
       await resetMemberPassword(memberId);
-      appendActivity('إعادة تعيين كلمة المرور', 'تم إعادة تعيين كلمة المرور إلى Test123.', 'success');
+      appendActivity('إعادة تعيين كلمة المرور', 'تم إعادة تعيين كلمة المرور وفق إعدادات النظام.', 'success');
       await loadSession();
     } catch (actionError) {
       setError(actionError instanceof Error ? actionError.message : 'تعذر إعادة تعيين كلمة المرور');
