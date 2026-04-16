@@ -35,6 +35,7 @@ import type {
   ComplaintReviewState,
   DashboardMe,
   DashboardOverview,
+  LeaderboardEntry,
   MemberAdminItem,
   MemberCreateFormState,
   MemberInfo,
@@ -193,6 +194,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [token, setToken] = useState<string | null>(getStoredToken());
   const [user, setUser] = useState<MemberInfo | null>(null);
   const [dashboard, setDashboard] = useState<DashboardOverview | null>(null);
+  const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
   const [members, setMembers] = useState<MemberAdminItem[]>([]);
   const [tasks, setTasks] = useState<TaskItem[]>([]);
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
@@ -267,6 +269,7 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       if (currentMember.mustChangePassword) {
         setDashboard(null);
+        setLeaderboard([]);
         setMembers([]);
         setTasks([]);
         setComplaints([]);
@@ -278,7 +281,7 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       // FIX: Use Promise.allSettled to handle partial failures gracefully
       // If one API call fails, others still complete instead of failing everything
-      const [dashboardResult, tasksResult, complaintsResult, newsResult] = await Promise.allSettled([
+      const [dashboardResult, tasksResult, complaintsResult, newsResult, leaderboardResult] = await Promise.allSettled([
         getDashboard().catch(err => {
           console.warn('Failed to load dashboard:', err);
           return null;
@@ -294,6 +297,10 @@ export function AppProvider({ children }: PropsWithChildren) {
         getNews().catch(err => {
           console.warn('Failed to load news:', err);
           return [];
+        }),
+        getLeaderboard().catch(err => {
+          console.warn('Failed to load leaderboard:', err);
+          return [] as LeaderboardEntry[];
         })
       ]);
 
@@ -311,6 +318,12 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       if (newsResult.status === 'fulfilled') {
         setNews(newsResult.value || []);
+      }
+
+      if (leaderboardResult.status === 'fulfilled') {
+        setLeaderboard(leaderboardResult.value || []);
+      } else if (dashboardResult.status === 'fulfilled' && dashboardResult.value) {
+        setLeaderboard(dashboardResult.value.topMembers ?? []);
       }
 
       if (currentMember.role === 'President' || currentMember.role === 'VicePresident' || hasPermission(currentMember, 'Users.Manage')) {
@@ -369,6 +382,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     } else {
       setUser(null);
       setDashboard(null);
+      setLeaderboard([]);
       setMembers([]);
       setTasks([]);
       setComplaints([]);
@@ -711,7 +725,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     token,
     user,
     dashboard,
-    leaderboard: dashboard?.topMembers ?? [],
+    leaderboard,
     members,
     tasks,
     complaints,
@@ -774,6 +788,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     createMemberItem,
     createTaskItem,
     dashboard,
+    leaderboard,
     deleteTaskItem,
     error,
     loadSession,

@@ -143,6 +143,12 @@ public static class AccessControl
 
     public static bool HasPermission(Member actor, string permissionKey)
     {
+        if (DefaultPermissionsForRole(actor.Role)
+            .Any(permission => string.Equals(permission, permissionKey, StringComparison.OrdinalIgnoreCase)))
+        {
+            return true;
+        }
+
         return actor.PermissionGrants.Any(grant => string.Equals(grant.PermissionKey, permissionKey, StringComparison.OrdinalIgnoreCase));
     }
 
