@@ -33,6 +33,7 @@ const productionApiBaseUrl = 'https://basmet-shabab.runasp.net';
 const authTokenKey = 'team-management-token';
 const unauthorizedEventName = 'basma:unauthorized';
 const isLocalRuntime = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+const netlifyHostnameSuffix = '.netlify.app';
 
 function resolveBaseUrl() {
   const env = import.meta.env as Record<string, string | undefined>;
@@ -44,6 +45,10 @@ function resolveBaseUrl() {
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     if (hostname === 'localhost' || hostname === '127.0.0.1') {
+      return '';
+    }
+
+    if (hostname.endsWith(netlifyHostnameSuffix)) {
       return '';
     }
   }
