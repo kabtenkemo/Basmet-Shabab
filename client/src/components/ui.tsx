@@ -14,12 +14,12 @@ export function Card({
   className?: string;
 }) {
   return (
-    <section className={`rounded-3xl border border-white/10 bg-slate-900/80 p-5 shadow-glow backdrop-blur ${className}`}>
+    <section className={`rounded-3xl border border-white/10 bg-slate-900/80 p-4 shadow-glow backdrop-blur sm:p-5 ${className}`}>
       {(title || subtitle || actions) && (
-        <header className="mb-4 flex items-start justify-between gap-3">
+        <header className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             {subtitle && <p className="text-xs font-semibold uppercase tracking-[0.35em] text-brand-300/80">{subtitle}</p>}
-            {title && <h2 className="mt-2 text-xl font-bold text-white">{title}</h2>}
+            {title && <h2 className="mt-2 text-lg font-bold text-white sm:text-xl">{title}</h2>}
           </div>
           {actions}
         </header>
@@ -39,9 +39,9 @@ export function StatCard({ label, value, hint, accent = 'brand' }: { label: stri
   };
 
   return (
-    <article className={`rounded-3xl border bg-gradient-to-br p-5 shadow-glow ${palette[accent]}`}>
+    <article className={`rounded-3xl border bg-gradient-to-br p-4 shadow-glow sm:p-5 ${palette[accent]}`}>
       <p className="text-sm font-semibold text-white/70">{label}</p>
-      <p className="mt-3 text-3xl font-extrabold text-white">{value}</p>
+      <p className="mt-3 text-2xl font-extrabold text-white sm:text-3xl">{value}</p>
       {hint && <p className="mt-2 text-sm text-white/70">{hint}</p>}
     </article>
   );
@@ -80,11 +80,11 @@ export function Modal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 px-4 py-6 backdrop-blur-sm" role="dialog" aria-modal="true">
-      <div className="w-full max-w-3xl rounded-[2rem] border border-white/10 bg-slate-900 p-6 shadow-2xl shadow-black/40">
+      <div className="w-full max-w-3xl max-h-[calc(100vh-2rem)] overflow-y-auto rounded-[2rem] border border-white/10 bg-slate-900 p-5 shadow-2xl shadow-black/40 scrollbar-thin sm:max-h-[calc(100vh-4rem)] sm:p-6">
         <div className="mb-5 flex items-start justify-between gap-4">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.35em] text-brand-300/75">{subtitle}</p>
-            <h3 className="mt-2 text-2xl font-bold text-white">{title}</h3>
+            <h3 className="mt-2 text-xl font-bold text-white sm:text-2xl">{title}</h3>
           </div>
           <button type="button" onClick={onClose} className="rounded-full border border-white/10 px-3 py-2 text-sm text-slate-300 transition hover:bg-white/5">
             إغلاق
@@ -150,7 +150,7 @@ export function SectionTitle({ eyebrow, title, description, actions }: { eyebrow
     <div className="mb-5 flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
       <div>
         <p className="text-xs font-semibold uppercase tracking-[0.35em] text-brand-300/75">{eyebrow}</p>
-        <h2 className="mt-2 text-2xl font-extrabold text-white">{title}</h2>
+        <h2 className="mt-2 text-xl font-extrabold text-white sm:text-2xl">{title}</h2>
         {description && <p className="mt-2 max-w-3xl text-sm leading-7 text-slate-300">{description}</p>}
       </div>
       {actions}

@@ -509,7 +509,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
                 <p className="mt-2 text-sm text-slate-300">تنظيم أعمال المؤسسة والمحافظات ومتابعة الأخبار</p>
               </div>
             </div>
-            <h1 className="mt-4 max-w-3xl text-4xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
+            <h1 className="mt-4 max-w-3xl text-3xl font-black leading-tight text-white sm:text-5xl lg:text-6xl">
               منصة بصمة شباب لتنظيم أعمال المؤسسة والمحافظات ومتابعة الأخبار.
             </h1>
           </div>

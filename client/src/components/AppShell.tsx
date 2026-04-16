@@ -42,6 +42,22 @@ export function AppShell({ children }: { children: ReactNode }) {
     return () => window.clearTimeout(timer);
   }, [searchDraft, search, setSearch]);
 
+  useEffect(() => {
+    if (typeof document === 'undefined') {
+      return undefined;
+    }
+
+    if (mobileOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [mobileOpen]);
+
   const navigate = (value: SectionKey) => {
     if (value !== section) {
       setSearch('');
@@ -53,7 +69,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="min-h-screen lg:grid lg:grid-cols-[290px_1fr]">
-      <aside className={`fixed inset-y-0 right-0 z-40 w-72 border-l px-5 py-6 backdrop-blur-xl transition-transform duration-300 lg:static lg:w-auto lg:translate-x-0 ${isLight ? 'border-slate-200 bg-slate-50/95 text-slate-900' : 'border-white/10 bg-slate-950/95 text-slate-100'} ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
+      {mobileOpen && (
+        <button
+          type="button"
+          aria-label="Close navigation"
+          className="fixed inset-0 z-30 bg-slate-950/60 backdrop-blur-sm lg:hidden"
+          onClick={() => setMobileOpen(false)}
+        />
+      )}
+      <aside className={`fixed inset-y-0 right-0 z-40 w-[84vw] max-w-xs border-l px-4 py-5 backdrop-blur-xl transition-transform duration-300 sm:w-72 sm:px-5 sm:py-6 lg:static lg:w-auto lg:translate-x-0 ${isLight ? 'border-slate-200 bg-slate-50/95 text-slate-900' : 'border-white/10 bg-slate-950/95 text-slate-100'} ${mobileOpen ? 'translate-x-0' : 'translate-x-full lg:translate-x-0'}`}>
         <div className="mb-8 flex items-center justify-between">
           <div>
             <p className={`text-xs font-semibold uppercase tracking-[0.35em] ${isLight ? 'text-brand-600/75' : 'text-brand-300/75'}`}>Basma Shabab Platform</p>
@@ -99,16 +123,20 @@ export function AppShell({ children }: { children: ReactNode }) {
       <div className="flex min-w-0 flex-col">
         <header className={`sticky top-0 z-30 border-b backdrop-blur-xl ${isLight ? 'border-slate-200 bg-white/90' : 'border-white/10 bg-slate-950/85'}`}>
           <div className="flex flex-wrap items-center gap-3 px-4 py-4 sm:px-6 lg:px-8">
-            <button type="button" className={`rounded-2xl border p-3 transition lg:hidden ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'}`} onClick={() => setMobileOpen(true)}>
+            <button type="button" className={`order-1 rounded-2xl border p-3 transition lg:hidden ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'}`} onClick={() => setMobileOpen(true)}>
               <FiMenu />
             </button>
 
-            <div className="flex min-w-0 flex-1 flex-col">
+            <div className="order-2 flex min-w-0 flex-1 flex-col">
               <p className={`text-xs uppercase tracking-[0.35em] ${isLight ? 'text-brand-600/75' : 'text-brand-300/75'}`}>{currentTitle}</p>
               <h2 className={`truncate text-lg font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.fullName ?? 'لوحة التحكم'}</h2>
             </div>
 
-            <div className="flex w-full flex-1 items-center gap-3 sm:max-w-xl">
+            <button type="button" className={`order-3 rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'} sm:order-4`} onClick={logout} aria-label="logout">
+              <FiLogOut />
+            </button>
+
+            <div className="order-4 flex w-full items-center gap-3 sm:order-3 sm:w-auto sm:flex-1 sm:max-w-xl">
               <div className={`flex flex-1 items-center gap-3 rounded-2xl border px-4 py-3 ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/5'}`}>
                 <FiSearch className={isLight ? 'text-slate-500' : 'text-slate-400'} />
                 <input
@@ -119,10 +147,6 @@ export function AppShell({ children }: { children: ReactNode }) {
                 />
               </div>
             </div>
-
-            <button type="button" className={`rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'}`} onClick={logout} aria-label="logout">
-              <FiLogOut />
-            </button>
           </div>
         </header>
 
