@@ -111,13 +111,6 @@ const roleLabels: Record<Role, string> = {
   CommitteeMember: 'عضو لجنة'
 };
 
-const leaderboardRoles: Role[] = [
-  'CentralMember',
-  'GovernorCoordinator',
-  'GovernorCommitteeCoordinator',
-  'CommitteeMember'
-];
-
 const taskAudienceLabels: Record<TaskAudienceType, string> = {
   All: 'للجميع',
   Members: 'لأعضاء معينين',
@@ -966,10 +959,7 @@ function OverviewPage() {
 
 function LeaderboardPage() {
   const { dashboard, leaderboard } = useApp();
-  const roleBuckets = leaderboardRoles.map((role) => ({
-    role,
-    entries: leaderboard.filter((entry) => entry.role === role),
-  }));
+  const topTen = leaderboard.slice(0, 10);
 
   return (
     <div className="space-y-6">
@@ -981,40 +971,26 @@ function LeaderboardPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <StatCard label="إجمالي الأعضاء" value={dashboard?.totalMembers ?? 0} accent="brand" />
-        <StatCard label="المتصدرون المعروضون" value={leaderboard.length} accent="success" />
-        <StatCard label="أعلى نقاط" value={leaderboard[0]?.points ?? 0} accent="amber" />
+        <StatCard label="المتصدرون المعروضون" value={topTen.length} accent="success" />
+        <StatCard label="أعلى نقاط" value={topTen[0]?.points ?? 0} accent="amber" />
       </div>
 
-      <Card title="المتصدرون حسب المنصب" subtitle="All roles">
-        <div className="space-y-4">
-          {roleBuckets.map(({ role, entries }) => (
-            <div key={role} className="rounded-3xl border border-white/10 bg-white/5 p-4">
-              <div className="mb-3 flex items-center justify-between gap-3">
+      <Card title="أفضل 10 أعضاء" subtitle="Top 10 overall">
+        {topTen.length === 0 ? (
+          <EmptyState title="لا يوجد بيانات" description="سيظهر المتصدرون هنا بمجرد وجود نقاط للأعضاء." />
+        ) : (
+          <div className="space-y-3">
+            {topTen.map((entry) => (
+              <div key={entry.memberId} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.35em] text-brand-300/75">{roleLabel(role)}</p>
-                  <p className="mt-1 text-sm text-slate-400">{entries.length} عضو</p>
+                  <p className="font-bold text-white">#{entry.rank} {entry.fullName}</p>
+                  <p className="text-sm text-slate-400">{roleLabel(entry.role)}</p>
                 </div>
-                <Badge tone="neutral">{entries.length}</Badge>
+                <Badge tone="success">{entry.points} نقطة</Badge>
               </div>
-
-              {entries.length === 0 ? (
-                <EmptyState title="لا يوجد أعضاء" description="لم يتم تسجيل أعضاء في هذا المنصب بعد." />
-              ) : (
-                <div className="space-y-3">
-                  {entries.slice(0, 3).map((entry) => (
-                    <div key={entry.memberId} className="flex items-center justify-between rounded-2xl border border-white/10 bg-slate-950/45 px-4 py-3">
-                      <div>
-                        <p className="font-bold text-white">#{entry.rank} {entry.fullName}</p>
-                        <p className="text-sm text-slate-400">{roleLabel(entry.role)}</p>
-                      </div>
-                      <Badge tone="success">{entry.points} نقطة</Badge>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </Card>
     </div>
   );

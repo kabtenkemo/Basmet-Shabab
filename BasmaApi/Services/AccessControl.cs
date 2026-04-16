@@ -153,7 +153,7 @@ public static class AccessControl
             MemberRole.President => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ReviewJoinRequestsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
             MemberRole.VicePresident => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
             MemberRole.CentralMember => [ManageUsersPermission, ManageComplaintsPermission, ViewDashboardPermission],
-            MemberRole.GovernorCoordinator => [ManageUsersPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
+            MemberRole.GovernorCoordinator => [ManageUsersPermission, ReviewJoinRequestsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
             MemberRole.GovernorCommitteeCoordinator => [ManageUsersPermission, ViewDashboardPermission, CreateCommitteeMemberPermission],
             _ => [ViewDashboardPermission]
         };

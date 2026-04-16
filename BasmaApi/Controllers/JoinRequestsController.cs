@@ -156,10 +156,17 @@ public sealed class JoinRequestsController : ControllerBase
             .Include(item => item.ReviewedByMember)
             .AsQueryable();
 
-        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident)
-            && currentMember.GovernorateId is not null)
+        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
         {
-            query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
+            if (currentMember.GovernorateId is not null)
+            {
+                query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
+            }
+            else if (!string.IsNullOrWhiteSpace(currentMember.GovernorName))
+            {
+                var governorName = currentMember.GovernorName.Trim();
+                query = query.Where(item => item.Governorate.Name == governorName);
+            }
         }
 
         var items = await query
@@ -196,11 +203,19 @@ public sealed class JoinRequestsController : ControllerBase
             return NotFound();
         }
 
-        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident)
-            && currentMember.GovernorateId is not null
-            && item.GovernorateId != currentMember.GovernorateId)
+        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
         {
-            return Forbid();
+            if (currentMember.GovernorateId is not null && item.GovernorateId != currentMember.GovernorateId)
+            {
+                return Forbid();
+            }
+
+            if (currentMember.GovernorateId is null
+                && !string.IsNullOrWhiteSpace(currentMember.GovernorName)
+                && !string.Equals(item.Governorate?.Name, currentMember.GovernorName, StringComparison.OrdinalIgnoreCase))
+            {
+                return Forbid();
+            }
         }
 
         item.Status = nextStatus;
