@@ -13,10 +13,23 @@ namespace BasmaApi.Controllers;
 public sealed class JoinRequestsController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
+    private readonly IPasswordService _passwordService;
+    private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
+    private readonly ILogger<JoinRequestsController> _logger;
 
-    public JoinRequestsController(AppDbContext dbContext)
+    public JoinRequestsController(
+        AppDbContext dbContext,
+        IPasswordService passwordService,
+        IConfiguration configuration,
+        IWebHostEnvironment environment,
+        ILogger<JoinRequestsController> logger)
     {
         _dbContext = dbContext;
+        _passwordService = passwordService;
+        _configuration = configuration;
+        _environment = environment;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -197,7 +210,10 @@ public sealed class JoinRequestsController : ControllerBase
             return BadRequest(new { message = "حالة الطلب غير صالحة. اختر Accepted أو Rejected." });
         }
 
-        var item = await _dbContext.TeamJoinRequests.FirstOrDefaultAsync(joinRequest => joinRequest.Id == id, cancellationToken);
+        var item = await _dbContext.TeamJoinRequests
+            .Include(joinRequest => joinRequest.Governorate)
+            .Include(joinRequest => joinRequest.Committee)
+            .FirstOrDefaultAsync(joinRequest => joinRequest.Id == id, cancellationToken);
         if (item is null)
         {
             return NotFound();
@@ -218,6 +234,60 @@ public sealed class JoinRequestsController : ControllerBase
             }
         }
 
+        if (nextStatus == JoinRequestStatus.Rejected)
+        {
+            _dbContext.TeamJoinRequests.Remove(item);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+            return Ok(new { message = "تم رفض الطلب وحذفه من القائمة." });
+        }
+
+        var normalizedEmail = item.Email.Trim().ToLowerInvariant();
+        var emailExists = await _dbContext.Members.AnyAsync(member => member.Email == normalizedEmail, cancellationToken);
+        if (emailExists)
+        {
+            return Conflict(new { message = "هذا البريد مرتبط بعضو مسجل بالفعل." });
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.NationalId))
+        {
+            var nationalIdExists = await _dbContext.Members.AnyAsync(member => member.NationalId == item.NationalId, cancellationToken);
+            if (nationalIdExists)
+            {
+                return Conflict(new { message = "الرقم القومي مسجل بالفعل." });
+            }
+        }
+
+        string initialPassword;
+        try
+        {
+            initialPassword = ResolveDefaultMemberPassword();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Cannot accept join request {JoinRequestId} because default password is not configured.", id);
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { message = "تعذر قبول الطلب بسبب إعدادات كلمة المرور الافتراضية. تواصل مع مسؤول النظام." });
+        }
+
+        var newMember = new Member
+        {
+            FullName = item.FullName.Trim(),
+            Email = normalizedEmail,
+            NationalId = item.NationalId,
+            BirthDate = item.BirthDate,
+            Role = MemberRole.CommitteeMember,
+            GovernorateId = item.GovernorateId,
+            CommitteeId = item.CommitteeId,
+            GovernorName = item.Governorate.Name,
+            CommitteeName = item.Committee?.Name,
+            CreatedByMemberId = currentMember.Id,
+            PasswordHash = _passwordService.HashPassword(initialPassword),
+            MustChangePassword = true
+        };
+
+        _dbContext.Members.Add(newMember);
+
         item.Status = nextStatus;
         item.AdminNotes = string.IsNullOrWhiteSpace(request.AdminNotes) ? null : request.AdminNotes.Trim();
         item.ReviewedAtUtc = DateTime.UtcNow;
@@ -229,7 +299,7 @@ public sealed class JoinRequestsController : ControllerBase
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return NoContent();
+        return Ok(new { message = "تم قبول الطلب وإنشاء حساب للمتقدم." });
     }
 
     private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)
@@ -240,9 +310,44 @@ public sealed class JoinRequestsController : ControllerBase
             return null;
         }
 
-        return await _dbContext.Members
+        var member = await _dbContext.Members
             .Include(member => member.PermissionGrants)
             .FirstOrDefaultAsync(member => member.Id == memberId.Value, cancellationToken);
+
+        if (member is not null
+            && member.GovernorateId is null
+            && !string.IsNullOrWhiteSpace(member.GovernorName))
+        {
+            var normalizedName = member.GovernorName.Trim().ToLower();
+            var governorate = await _dbContext.Governorates
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Name.ToLower() == normalizedName, cancellationToken);
+
+            if (governorate is not null)
+            {
+                member.GovernorateId = governorate.Id;
+                member.GovernorName = governorate.Name;
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+        }
+
+        return member;
+    }
+
+    private string ResolveDefaultMemberPassword()
+    {
+        var configuredPassword = _configuration["Members:DefaultPassword"];
+        if (!string.IsNullOrWhiteSpace(configuredPassword))
+        {
+            return configuredPassword;
+        }
+
+        if (_environment.IsDevelopment())
+        {
+            return "Test123.";
+        }
+
+        throw new InvalidOperationException("Members:DefaultPassword must be configured outside Development.");
     }
 
     private static TeamJoinRequestResponse MapResponse(TeamJoinRequest item)
