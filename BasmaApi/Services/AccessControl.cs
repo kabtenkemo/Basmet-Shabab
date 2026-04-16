@@ -44,12 +44,22 @@ public static class AccessControl
             return true;
         }
 
+        var sameGovernorate = actor.GovernorateId.HasValue && target.GovernorateId.HasValue
+            ? actor.GovernorateId == target.GovernorateId
+            : !string.IsNullOrWhiteSpace(actor.GovernorName)
+                && string.Equals(actor.GovernorName, target.GovernorName, StringComparison.OrdinalIgnoreCase);
+
+        var sameCommittee = actor.CommitteeId.HasValue && target.CommitteeId.HasValue
+            ? actor.CommitteeId == target.CommitteeId
+            : !string.IsNullOrWhiteSpace(actor.CommitteeName)
+                && string.Equals(actor.CommitteeName, target.CommitteeName, StringComparison.OrdinalIgnoreCase);
+
         return actor.Role switch
         {
-            MemberRole.GovernorCoordinator => string.Equals(actor.GovernorName, target.GovernorName, StringComparison.OrdinalIgnoreCase)
+            MemberRole.GovernorCoordinator => sameGovernorate
                 && target.Role is not (MemberRole.President or MemberRole.VicePresident),
-            MemberRole.GovernorCommitteeCoordinator => string.Equals(actor.GovernorName, target.GovernorName, StringComparison.OrdinalIgnoreCase)
-                && string.Equals(actor.CommitteeName, target.CommitteeName, StringComparison.OrdinalIgnoreCase)
+            MemberRole.GovernorCommitteeCoordinator => sameGovernorate
+                && sameCommittee
                 && target.Role == MemberRole.CommitteeMember,
             MemberRole.CentralMember => target.Role == MemberRole.CommitteeMember,
             _ => false

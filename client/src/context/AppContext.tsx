@@ -242,7 +242,9 @@ export function AppProvider({ children }: PropsWithChildren) {
   }, [user]);
 
   const canReviewJoinRequests = useMemo(() => {
-    return user ? user.role === 'President' || hasPermission(user, 'JoinRequests.Review') : false;
+    return user
+      ? user.role === 'President' || user.role === 'GovernorCoordinator' || hasPermission(user, 'JoinRequests.Review')
+      : false;
   }, [user]);
 
   const canViewReports = useMemo(() => {
@@ -356,7 +358,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         setComplaints([]);
       }
 
-      if (currentMember.role === 'President' || hasPermission(currentMember, 'JoinRequests.Review')) {
+      if (currentMember.role === 'President' || currentMember.role === 'GovernorCoordinator' || hasPermission(currentMember, 'JoinRequests.Review')) {
         const joinRequestsResult = await getJoinRequests().catch(err => {
           console.warn('Failed to load join requests:', err);
           return [] as TeamJoinRequest[];

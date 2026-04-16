@@ -267,6 +267,18 @@ function roleNeedsCommittee(role: Role) {
   return role === 'GovernorCommitteeCoordinator' || role === 'CommitteeMember';
 }
 
+function normalizeScopeName(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? '';
+}
+
+function isSameScopeName(left: string | null | undefined, right: string | null | undefined) {
+  if (!left || !right) {
+    return false;
+  }
+
+  return normalizeScopeName(left) === normalizeScopeName(right);
+}
+
 function safeJsonParse(value: string | null | undefined) {
   if (!value) {
     return null;
@@ -1163,6 +1175,8 @@ function JoinRequestsPage() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-300">
                       <p>اللجنة: {item.committeeName ?? 'غير محددة'}</p>
+                      <p className="mt-1">الرقم القومي: {item.nationalId ?? '—'}</p>
+                      <p className="mt-1">تاريخ الميلاد: {item.birthDate ? formatDateOnly(item.birthDate) : '—'}</p>
                       <p className="mt-1">المحول إليه: {item.assignedToMemberName ?? 'سيظهر عند التوزيع'}</p>
                       <p className="mt-1">تاريخ الإرسال: {formatDate(item.createdAtUtc)}</p>
                     </div>
@@ -1337,6 +1351,37 @@ function MembersPage() {
   }, [memberForm.role]);
 
   const selectedMember = filtered.find((item) => item.memberId === selectedMemberId) ?? filtered[0] ?? null;
+  const canManageSelectedMember = useMemo(() => {
+    if (!user || !selectedMember) {
+      return false;
+    }
+
+    if (user.role === 'President' || user.role === 'VicePresident') {
+      return true;
+    }
+
+    if (user.id === selectedMember.memberId) {
+      return true;
+    }
+
+    const sameGovernorate = isSameScopeName(user.governorName, selectedMember.governorName);
+    const sameCommittee = isSameScopeName(user.committeeName, selectedMember.committeeName);
+
+    if (user.role === 'GovernorCoordinator') {
+      return sameGovernorate && selectedMember.role !== 'President' && selectedMember.role !== 'VicePresident';
+    }
+
+    if (user.role === 'GovernorCommitteeCoordinator') {
+      return sameGovernorate && sameCommittee && selectedMember.role === 'CommitteeMember';
+    }
+
+    if (user.role === 'CentralMember') {
+      return selectedMember.role === 'CommitteeMember';
+    }
+
+    return false;
+  }, [selectedMember, user]);
+  const canGrantSelectedPermissions = canManageUsers || canManageSelectedMember;
 
   const columns: TableColumn<MemberAdminItem>[] = [
     { header: 'الاسم', render: (row) => <div><p className="font-bold text-white">{row.fullName}</p><p className="text-xs text-slate-400">{row.email}</p></div> },
@@ -1423,7 +1468,7 @@ function MembersPage() {
   };
 
   const savePermission = async () => {
-    if (!selectedMember || selectedPermissions.length === 0) return;
+    if (!selectedMember || selectedPermissions.length === 0 || !canGrantSelectedPermissions) return;
 
     for (const permission of selectedPermissions) {
       await assignPermission(selectedMember.memberId, permission);
@@ -1518,7 +1563,7 @@ function MembersPage() {
                   </div>
                 </div>
               </Field>
-              <Button className="w-full" variant="secondary" onClick={() => void savePermission()} disabled={!canManageUsers || selectedPermissions.length === 0}>إضافة الصلاحيات المحددة</Button>
+              <Button className="w-full" variant="secondary" onClick={() => void savePermission()} disabled={!canGrantSelectedPermissions || selectedPermissions.length === 0}>إضافة الصلاحيات المحددة</Button>
 
               <Field label="تعديل النقاط">
                 <Input value={pointForm.amount} onChange={(event) => setPointForm((current) => ({ ...current, amount: event.target.value }))} type="number" />

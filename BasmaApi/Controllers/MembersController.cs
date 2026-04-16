@@ -438,12 +438,28 @@ public sealed class MembersController : ControllerBase
 
         if (actor.Role == MemberRole.GovernorCoordinator)
         {
-            return query.Where(member => member.GovernorName == actor.GovernorName);
+            if (actor.GovernorateId is not null)
+            {
+                return query.Where(member => member.GovernorateId == actor.GovernorateId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(actor.GovernorName))
+            {
+                return query.Where(member => member.GovernorName == actor.GovernorName);
+            }
         }
 
         if (actor.Role == MemberRole.GovernorCommitteeCoordinator)
         {
-            return query.Where(member => member.GovernorName == actor.GovernorName && member.CommitteeName == actor.CommitteeName);
+            if (actor.GovernorateId is not null && actor.CommitteeId is not null)
+            {
+                return query.Where(member => member.GovernorateId == actor.GovernorateId && member.CommitteeId == actor.CommitteeId);
+            }
+
+            if (!string.IsNullOrWhiteSpace(actor.GovernorName) && !string.IsNullOrWhiteSpace(actor.CommitteeName))
+            {
+                return query.Where(member => member.GovernorName == actor.GovernorName && member.CommitteeName == actor.CommitteeName);
+            }
         }
 
         return query.Where(member => member.Id == actor.Id);
