@@ -38,19 +38,24 @@ const netlifyHostnameSuffix = '.netlify.app';
 function resolveBaseUrl() {
   const env = import.meta.env as Record<string, string | undefined>;
   const configured = env.VITE_API_BASE_URL?.trim();
-  if (configured) {
-    return configured.replace(/\/$/, '');
-  }
+  const normalizedConfigured = configured ? configured.replace(/\/+$/, '') : '';
 
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
-    if (hostname === 'localhost' || hostname === '127.0.0.1') {
+    const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
+    const isNetlify = hostname.endsWith(netlifyHostnameSuffix);
+
+    if (isLocalhost) {
       return '';
     }
 
-    if (hostname.endsWith(netlifyHostnameSuffix)) {
+    if (isNetlify && (!normalizedConfigured || normalizedConfigured === productionApiBaseUrl)) {
       return '';
     }
+  }
+
+  if (normalizedConfigured) {
+    return normalizedConfigured;
   }
 
   return productionApiBaseUrl;
