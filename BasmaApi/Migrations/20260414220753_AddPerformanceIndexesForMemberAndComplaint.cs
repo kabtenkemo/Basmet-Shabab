@@ -10,55 +10,68 @@ namespace BasmaApi.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateIndex(
-                name: "IX_Members_CreatedAtUtc",
-                table: "Members",
-                column: "CreatedAtUtc");
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('Members', 'CreatedAtUtc') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Members_CreatedAtUtc' AND object_id = OBJECT_ID('Members'))
+BEGIN
+    CREATE INDEX [IX_Members_CreatedAtUtc] ON [Members] ([CreatedAtUtc]);
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Members_Role",
-                table: "Members",
-                column: "Role");
+IF COL_LENGTH('Members', 'Role') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Members_Role' AND object_id = OBJECT_ID('Members'))
+BEGIN
+    CREATE INDEX [IX_Members_Role] ON [Members] ([Role]);
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Complaints_CreatedAtUtc",
-                table: "Complaints",
-                column: "CreatedAtUtc",
-                descending: new bool[0]);
+IF COL_LENGTH('Complaints', 'CreatedAtUtc') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Complaints_CreatedAtUtc' AND object_id = OBJECT_ID('Complaints'))
+BEGIN
+    CREATE INDEX [IX_Complaints_CreatedAtUtc] ON [Complaints] ([CreatedAtUtc] DESC);
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Complaints_Priority",
-                table: "Complaints",
-                column: "Priority");
+IF COL_LENGTH('Complaints', 'Priority') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Complaints_Priority' AND object_id = OBJECT_ID('Complaints'))
+BEGIN
+    CREATE INDEX [IX_Complaints_Priority] ON [Complaints] ([Priority]);
+END
 
-            migrationBuilder.CreateIndex(
-                name: "IX_Complaints_Status",
-                table: "Complaints",
-                column: "Status");
+IF COL_LENGTH('Complaints', 'Status') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Complaints_Status' AND object_id = OBJECT_ID('Complaints'))
+BEGIN
+    CREATE INDEX [IX_Complaints_Status] ON [Complaints] ([Status]);
+END
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropIndex(
-                name: "IX_Members_CreatedAtUtc",
-                table: "Members");
+            migrationBuilder.Sql(@"
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Members_CreatedAtUtc' AND object_id = OBJECT_ID('Members'))
+BEGIN
+    DROP INDEX [IX_Members_CreatedAtUtc] ON [Members];
+END
 
-            migrationBuilder.DropIndex(
-                name: "IX_Members_Role",
-                table: "Members");
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Members_Role' AND object_id = OBJECT_ID('Members'))
+BEGIN
+    DROP INDEX [IX_Members_Role] ON [Members];
+END
 
-            migrationBuilder.DropIndex(
-                name: "IX_Complaints_CreatedAtUtc",
-                table: "Complaints");
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Complaints_CreatedAtUtc' AND object_id = OBJECT_ID('Complaints'))
+BEGIN
+    DROP INDEX [IX_Complaints_CreatedAtUtc] ON [Complaints];
+END
 
-            migrationBuilder.DropIndex(
-                name: "IX_Complaints_Priority",
-                table: "Complaints");
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Complaints_Priority' AND object_id = OBJECT_ID('Complaints'))
+BEGIN
+    DROP INDEX [IX_Complaints_Priority] ON [Complaints];
+END
 
-            migrationBuilder.DropIndex(
-                name: "IX_Complaints_Status",
-                table: "Complaints");
+IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Complaints_Status' AND object_id = OBJECT_ID('Complaints'))
+BEGIN
+    DROP INDEX [IX_Complaints_Status] ON [Complaints];
+END
+");
         }
     }
 }

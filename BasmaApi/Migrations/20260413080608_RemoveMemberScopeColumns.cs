@@ -10,31 +10,29 @@ namespace BasmaApi.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropColumn(
-                name: "CommitteeName",
-                table: "Members");
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('dbo.Members', 'CommitteeName') IS NOT NULL
+    ALTER TABLE [dbo].[Members] DROP COLUMN [CommitteeName];
+");
 
-            migrationBuilder.DropColumn(
-                name: "GovernorName",
-                table: "Members");
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('dbo.Members', 'GovernorName') IS NOT NULL
+    ALTER TABLE [dbo].[Members] DROP COLUMN [GovernorName];
+");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.AddColumn<string>(
-                name: "GovernorName",
-                table: "Members",
-                type: "nvarchar(120)",
-                maxLength: 120,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('dbo.Members', 'GovernorName') IS NULL
+    ALTER TABLE [dbo].[Members] ADD [GovernorName] nvarchar(120) NULL;
+");
 
-            migrationBuilder.AddColumn<string>(
-                name: "CommitteeName",
-                table: "Members",
-                type: "nvarchar(120)",
-                maxLength: 120,
-                nullable: true);
+            migrationBuilder.Sql(@"
+IF COL_LENGTH('dbo.Members', 'CommitteeName') IS NULL
+    ALTER TABLE [dbo].[Members] ADD [CommitteeName] nvarchar(120) NULL;
+");
         }
     }
 }

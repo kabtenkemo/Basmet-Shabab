@@ -186,7 +186,8 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TaskTargetMembers_Task
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TaskTargetRoles_TaskId_Role' AND object_id = OBJECT_ID('TaskTargetRoles'))
     CREATE UNIQUE INDEX [IX_TaskTargetRoles_TaskId_Role] ON [TaskTargetRoles] ([TaskId], [Role]);
 
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Complaints_Members_AssignedToMemberId')
+IF COL_LENGTH('Complaints', 'AssignedToMemberId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Complaints_Members_AssignedToMemberId')
 BEGIN
     ALTER TABLE [Complaints]
     ADD CONSTRAINT [FK_Complaints_Members_AssignedToMemberId]
@@ -230,7 +231,8 @@ IF COL_LENGTH('Members', 'MustChangePassword') IS NOT NULL AND OBJECT_ID('DF_Mem
 IF COL_LENGTH('Members', 'MustChangePassword') IS NOT NULL
     ALTER TABLE [Members] DROP COLUMN [MustChangePassword];
 
-IF NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Complaints_Members_AssignedToMemberId')
+IF COL_LENGTH('Complaints', 'AssignedToMemberId') IS NOT NULL
+   AND NOT EXISTS (SELECT 1 FROM sys.foreign_keys WHERE name = 'FK_Complaints_Members_AssignedToMemberId')
 BEGIN
     ALTER TABLE [Complaints]
     ADD CONSTRAINT [FK_Complaints_Members_AssignedToMemberId]

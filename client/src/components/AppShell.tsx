@@ -28,6 +28,10 @@ export function AppShell({ children }: { children: ReactNode }) {
   }, [navigation, section]);
 
   const navigate = (value: SectionKey) => {
+    if (value !== section) {
+      setSearch('');
+    }
+
     setSection(value);
     setMobileOpen(false);
   };

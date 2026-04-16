@@ -308,9 +308,60 @@ function loginTitle() {
 
 type PublicRoute = 'login' | 'join';
 
+const sectionPathByKey: Record<SectionKey, string> = {
+  overview: '/dashbourd',
+  leaderboard: '/leaderboard',
+  news: '/news',
+  members: '/members',
+  tasks: '/tasks',
+  complaints: '/complaints',
+  auditlogs: '/audit-logs',
+  committees: '/committees',
+  suggestions: '/suggestions',
+  reports: '/reports',
+  profile: '/profile'
+};
+
+const sectionByPath: Record<string, SectionKey> = {
+  '/dashbourd': 'overview',
+  '/dashboard': 'overview',
+  '/overview': 'overview',
+  '/leaderboard': 'leaderboard',
+  '/news': 'news',
+  '/members': 'members',
+  '/tasks': 'tasks',
+  '/complaints': 'complaints',
+  '/audit-logs': 'auditlogs',
+  '/auditlogs': 'auditlogs',
+  '/committees': 'committees',
+  '/suggestions': 'suggestions',
+  '/reports': 'reports',
+  '/profile': 'profile'
+};
+
+function normalizePathname(pathname: string): string {
+  const normalized = pathname.trim().toLowerCase();
+
+  if (!normalized || normalized === '/') {
+    return '/';
+  }
+
+  return normalized.replace(/\/+$/, '');
+}
+
+function resolvePrivateSection(pathname: string): SectionKey {
+  const normalizedPath = normalizePathname(pathname);
+  return sectionByPath[normalizedPath] ?? 'overview';
+}
+
 function resolvePublicRoute(): PublicRoute {
   if (typeof window === 'undefined') {
     return 'login';
+  }
+
+  const pathname = normalizePathname(window.location.pathname);
+  if (pathname === '/join') {
+    return 'join';
   }
 
   const hash = window.location.hash.toLowerCase();
@@ -2671,32 +2722,88 @@ function ProfilePage() {
 }
 
 export default function App() {
-  const { isAuthenticated, section, clearError } = useApp();
+  const { isAuthenticated, section, clearError, navigation, setSection } = useApp();
   const [publicRoute, setPublicRoute] = useState<PublicRoute>(() => resolvePublicRoute());
+  const [privateRouteReady, setPrivateRouteReady] = useState(false);
 
   useEffect(() => {
     clearError();
   }, [clearError]);
 
   useEffect(() => {
-    const onHashChange = () => {
-      setPublicRoute(resolvePublicRoute());
-    };
-
-    window.addEventListener('hashchange', onHashChange);
-    return () => window.removeEventListener('hashchange', onHashChange);
-  }, []);
-
-  const goToPublicRoute = (route: PublicRoute) => {
-    if (route === 'join') {
-      window.location.hash = '/join';
+    if (isAuthenticated) {
       return;
     }
 
-    if (window.location.hash) {
-      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+    const onLocationChange = () => {
+      setPublicRoute(resolvePublicRoute());
+    };
+
+    window.addEventListener('popstate', onLocationChange);
+    window.addEventListener('hashchange', onLocationChange);
+
+    return () => {
+      window.removeEventListener('popstate', onLocationChange);
+      window.removeEventListener('hashchange', onLocationChange);
+    };
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (isAuthenticated) {
+      return;
     }
+
+    const pathname = normalizePathname(window.location.pathname);
+    if (pathname === '/' || pathname === '/login' || pathname === '/join') {
+      return;
+    }
+
+    window.history.replaceState(null, '', '/login');
     setPublicRoute('login');
+  }, [isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) {
+      setPrivateRouteReady(false);
+      return;
+    }
+
+    const syncSectionFromPath = () => {
+      const routedSection = resolvePrivateSection(window.location.pathname);
+      const allowed = navigation.some((item) => item.key === routedSection);
+      const targetSection = allowed ? routedSection : 'overview';
+
+      if (section !== targetSection) {
+        setSection(targetSection);
+        return;
+      }
+
+      setPrivateRouteReady(true);
+    };
+
+    syncSectionFromPath();
+    window.addEventListener('popstate', syncSectionFromPath);
+
+    return () => window.removeEventListener('popstate', syncSectionFromPath);
+  }, [isAuthenticated, navigation, section, setSection]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !privateRouteReady) {
+      return;
+    }
+
+    const targetPath = sectionPathByKey[section] ?? '/dashbourd';
+    const currentPath = normalizePathname(window.location.pathname);
+
+    if (currentPath !== targetPath) {
+      window.history.pushState(null, '', `${targetPath}${window.location.search}`);
+    }
+  }, [isAuthenticated, privateRouteReady, section]);
+
+  const goToPublicRoute = (route: PublicRoute) => {
+    const targetPath = route === 'join' ? '/join' : '/login';
+    window.history.replaceState(null, '', `${targetPath}${window.location.search}`);
+    setPublicRoute(route);
   };
 
   if (!isAuthenticated) {
