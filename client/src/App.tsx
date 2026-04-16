@@ -532,7 +532,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
         <div className="w-full max-w-xl space-y-6">
         <Card title={loginTitle()} subtitle="Authentication" className="w-full">
           <form className="space-y-4" onSubmit={submit}>
-            <Field label="البريد الإلكتروني" hint="مثال: president@basmet.local - Lowercase فقط">
+            <Field label="البريد الإلكتروني" hint="مثال: president@basmet.local">
               <Input
                 value={email}
                 onChange={(event) => {
@@ -623,7 +623,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
               <p className="font-semibold text-white mb-2">ملاحظات مهمة:</p>
               <ul className="list-inside space-y-1">
                 <li>• التسجيل الخارجي مغلق - الحسابات تُنشأ من داخل النظام فقط</li>
-                <li>• البريد الإلكتروني: lowercase فقط (مثال: president@basmet.local)</li>
+                <li>• البريد الإلكتروني يقبل أحرف كبيرة أو صغيرة (مثال: president@basmet.local)</li>
                 <li>• إذا نسيت كلمة المرور، تواصل مع المسؤول</li>
               </ul>
             </div>

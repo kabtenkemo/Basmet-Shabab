@@ -236,7 +236,7 @@ export async function login(email: string, password: string) {
   return request<AuthResponse>({
     method: 'POST',
     url: '/api/auth/login',
-    data: { email: email.trim(), password }
+    data: { email: email.trim().toLowerCase(), password }
   });
 }
 
@@ -266,6 +266,7 @@ export async function createMember(form: MemberCreateFormState) {
     url: '/api/members',
     data: {
       ...form,
+      email: form.email.trim().toLowerCase(),
       governorateId: form.governorateId || null,
       committeeId: form.committeeId || null,
       birthDate: form.birthDate || null
