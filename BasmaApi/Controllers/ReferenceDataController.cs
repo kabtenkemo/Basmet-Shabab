@@ -14,6 +14,7 @@ namespace BasmaApi.Controllers;
 public sealed class ReferenceDataController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
+    private readonly ILogger<ReferenceDataController> _logger;
 
     private static readonly string[] DefaultGovernorateNames =
     {
@@ -46,9 +47,10 @@ public sealed class ReferenceDataController : ControllerBase
         "مطروح"
     };
 
-    public ReferenceDataController(AppDbContext dbContext)
+    public ReferenceDataController(AppDbContext dbContext, ILogger<ReferenceDataController> logger)
     {
         _dbContext = dbContext;
+        _logger = logger;
     }
 
     [AllowAnonymous]
@@ -160,8 +162,9 @@ public sealed class ReferenceDataController : ControllerBase
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
         }
-        catch (DbUpdateException)
+        catch (DbUpdateException ex)
         {
+            _logger.LogInformation(ex, "Governorates seed encountered a concurrent insert conflict. Request will continue.");
             // Another request may have seeded data concurrently.
             _dbContext.ChangeTracker.Clear();
         }

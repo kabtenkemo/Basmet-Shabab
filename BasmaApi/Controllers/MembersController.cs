@@ -15,11 +15,22 @@ public sealed class MembersController : ControllerBase
 {
     private readonly AppDbContext _dbContext;
     private readonly IPasswordService _passwordService;
+    private readonly IConfiguration _configuration;
+    private readonly IWebHostEnvironment _environment;
+    private readonly ILogger<MembersController> _logger;
 
-    public MembersController(AppDbContext dbContext, IPasswordService passwordService)
+    public MembersController(
+        AppDbContext dbContext,
+        IPasswordService passwordService,
+        IConfiguration configuration,
+        IWebHostEnvironment environment,
+        ILogger<MembersController> logger)
     {
         _dbContext = dbContext;
         _passwordService = passwordService;
+        _configuration = configuration;
+        _environment = environment;
+        _logger = logger;
     }
 
     [HttpGet("me")]
@@ -120,7 +131,7 @@ public sealed class MembersController : ControllerBase
             return BadRequest(new { message = "البريد الإلكتروني غير صحيح." });
         }
 
-        var emailExists = await _dbContext.Members.AnyAsync(member => member.Email.ToLower() == email, cancellationToken);
+        var emailExists = await _dbContext.Members.AnyAsync(member => member.Email == email, cancellationToken);
         if (emailExists)
         {
             return Conflict(new { message = "هذا البريد مستخدم بالفعل. جرب بريد آخر." });
@@ -140,6 +151,19 @@ public sealed class MembersController : ControllerBase
             return BadRequest(new { message = scopeResult.ErrorMessage });
         }
 
+        string initialPassword;
+        try
+        {
+            initialPassword = ResolveDefaultMemberPassword();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Cannot create member because default password is not configured.");
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { message = "تعذر إنشاء العضو بسبب إعدادات كلمة المرور الافتراضية. تواصل مع مسؤول النظام." });
+        }
+
         var member = new Member
         {
             FullName = request.FullName.Trim(),
@@ -152,7 +176,7 @@ public sealed class MembersController : ControllerBase
             GovernorName = scopeResult.GovernorName,
             CommitteeName = scopeResult.CommitteeName,
             CreatedByMemberId = currentMember.Id,
-            PasswordHash = _passwordService.HashPassword("Test123."),
+            PasswordHash = _passwordService.HashPassword(initialPassword),
             MustChangePassword = true
         };
 
@@ -295,12 +319,24 @@ public sealed class MembersController : ControllerBase
             return Forbid();
         }
 
-        // Reset password to default: Test123.
-        member.PasswordHash = _passwordService.HashPassword("Test123.");
+        string resetPassword;
+        try
+        {
+            resetPassword = ResolveDefaultMemberPassword();
+        }
+        catch (InvalidOperationException ex)
+        {
+            _logger.LogError(ex, "Cannot reset password for member {MemberId} because default password is not configured.", id);
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                new { message = "تعذر إعادة التعيين بسبب إعدادات كلمة المرور الافتراضية. تواصل مع مسؤول النظام." });
+        }
+
+        member.PasswordHash = _passwordService.HashPassword(resetPassword);
         member.MustChangePassword = true;
         await _dbContext.SaveChangesAsync(cancellationToken);
 
-        return Ok(new { message = "تم إعادة تعيين كلمة المرور إلى Test123. بنجاح." });
+        return Ok(new { message = "تم إعادة تعيين كلمة المرور بنجاح وفق إعدادات النظام." });
     }
 
     private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)
@@ -434,5 +470,21 @@ public sealed class MembersController : ControllerBase
         return fullName
             .Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
             .Length >= 4;
+    }
+
+    private string ResolveDefaultMemberPassword()
+    {
+        var configuredPassword = _configuration["Members:DefaultPassword"];
+        if (!string.IsNullOrWhiteSpace(configuredPassword))
+        {
+            return configuredPassword;
+        }
+
+        if (_environment.IsDevelopment())
+        {
+            return "Test123.";
+        }
+
+        throw new InvalidOperationException("Members:DefaultPassword must be configured outside Development.");
     }
 }

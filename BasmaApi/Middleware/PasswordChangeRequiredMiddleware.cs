@@ -6,21 +6,13 @@ namespace BasmaApi.Middleware;
 
 public sealed class PasswordChangeRequiredMiddleware
 {
-    // Only allow endpoints that don't require changed password
-    // FIX: Removed /api/members to prevent circumventing password change requirement
-    private static readonly string[] AllowedPaths =
-    [
-        "/api/members/me",
-        "/api/auth/change-password",
-        "/api/governorates",
-        "/api/auth/logout"
-    ];
-
     private readonly RequestDelegate _next;
+    private readonly ILogger<PasswordChangeRequiredMiddleware> _logger;
 
-    public PasswordChangeRequiredMiddleware(RequestDelegate next)
+    public PasswordChangeRequiredMiddleware(RequestDelegate next, ILogger<PasswordChangeRequiredMiddleware> logger)
     {
         _next = next;
+        _logger = logger;
     }
 
     public async Task InvokeAsync(HttpContext context, AppDbContext dbContext)
@@ -31,7 +23,7 @@ public sealed class PasswordChangeRequiredMiddleware
             return;
         }
 
-        if (AllowedPaths.Any(path => context.Request.Path.StartsWithSegments(path)))
+        if (IsAllowedWithoutPasswordChange(context))
         {
             await _next(context);
             return;
@@ -56,8 +48,28 @@ public sealed class PasswordChangeRequiredMiddleware
             return;
         }
 
+        _logger.LogInformation(
+            "Request blocked until password change is completed for member {MemberId}. Method={Method} Path={Path}",
+            memberId.Value,
+            context.Request.Method,
+            context.Request.Path.Value);
+
         context.Response.StatusCode = StatusCodes.Status428PreconditionRequired;
         context.Response.ContentType = "application/json";
         await context.Response.WriteAsJsonAsync(new { message = "يجب تغيير كلمة المرور أولًا." }, context.RequestAborted);
+    }
+
+    private static bool IsAllowedWithoutPasswordChange(HttpContext context)
+    {
+        if (context.Request.Path.StartsWithSegments("/api/members/me")
+            || context.Request.Path.StartsWithSegments("/api/auth/change-password")
+            || context.Request.Path.StartsWithSegments("/api/auth/logout"))
+        {
+            return true;
+        }
+
+        // Public governorates/committees reads are allowed before password change.
+        return HttpMethods.IsGet(context.Request.Method)
+            && context.Request.Path.StartsWithSegments("/api/governorates");
     }
 }

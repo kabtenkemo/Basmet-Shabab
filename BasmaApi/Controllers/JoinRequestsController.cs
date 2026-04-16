@@ -82,7 +82,7 @@ public sealed class JoinRequestsController : ControllerBase
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var duplicatePendingRequest = await _dbContext.TeamJoinRequests.AnyAsync(
-            item => item.Email.ToLower() == normalizedEmail && item.GovernorateId == request.GovernorateId && item.Status == JoinRequestStatus.Pending,
+            item => item.Email == normalizedEmail && item.GovernorateId == request.GovernorateId && item.Status == JoinRequestStatus.Pending,
             cancellationToken);
 
         if (duplicatePendingRequest)

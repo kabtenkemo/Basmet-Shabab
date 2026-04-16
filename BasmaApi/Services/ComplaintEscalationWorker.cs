@@ -19,6 +19,10 @@ public sealed class ComplaintEscalationWorker : BackgroundService
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
+        _logger.LogInformation(
+            "Complaint escalation worker started with interval {IntervalMinutes} minutes.",
+            _interval.TotalMinutes);
+
         using var timer = new PeriodicTimer(_interval);
 
         while (!stoppingToken.IsCancellationRequested)
@@ -27,9 +31,13 @@ public sealed class ComplaintEscalationWorker : BackgroundService
             {
                 await RunOnceAsync(stoppingToken);
             }
+            catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested)
+            {
+                break;
+            }
             catch (Exception exception)
             {
-                _logger.LogError(exception, "Complaint escalation worker failed.");
+                _logger.LogError(exception, "Complaint escalation worker cycle failed.");
             }
 
             if (!await timer.WaitForNextTickAsync(stoppingToken))
@@ -37,6 +45,8 @@ public sealed class ComplaintEscalationWorker : BackgroundService
                 break;
             }
         }
+
+        _logger.LogInformation("Complaint escalation worker stopped.");
     }
 
     private async Task RunOnceAsync(CancellationToken cancellationToken)
@@ -45,6 +55,13 @@ public sealed class ComplaintEscalationWorker : BackgroundService
         var escalationService = scope.ServiceProvider.GetRequiredService<IComplaintEscalationService>();
 
         var complaints = await escalationService.GetEscalationCandidatesAsync(cancellationToken);
+        if (complaints.Count == 0)
+        {
+            _logger.LogDebug("Complaint escalation cycle found no candidates.");
+            return;
+        }
+
+        var escalatedCount = 0;
         foreach (var complaint in complaints)
         {
             if (complaint.EscalationLevel >= 3)
@@ -53,6 +70,12 @@ public sealed class ComplaintEscalationWorker : BackgroundService
             }
 
             await escalationService.EscalateAsync(complaint, null, "Auto escalation due to SLA breach.", automatic: true, cancellationToken);
+            escalatedCount++;
         }
+
+        _logger.LogInformation(
+            "Complaint escalation cycle completed. Candidates={CandidateCount}, Escalated={EscalatedCount}",
+            complaints.Count,
+            escalatedCount);
     }
 }

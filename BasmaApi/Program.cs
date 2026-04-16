@@ -1,4 +1,5 @@
 using System.Text;
+using System.Diagnostics;
 using BasmaApi.Data;
 using BasmaApi.Middleware;
 using BasmaApi.Models;
@@ -151,9 +152,9 @@ if (app.Environment.IsProduction())
         throw new InvalidOperationException("CRITICAL: Jwt:Audience must be configured in production.");
 }
 
-if (!app.Environment.IsProduction())
+if (!app.Environment.IsProduction() && string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
 {
-    Console.WriteLine("⚠️  Running in Development mode with default JWT keys. Configure for production.");
+    app.Logger.LogWarning("Running with development JWT fallback key. Configure Jwt:Key before deploying shared environments.");
 }
 
 using (var scope = app.Services.CreateScope())
@@ -163,7 +164,7 @@ using (var scope = app.Services.CreateScope())
 
     try
     {
-        startupLogger.LogInformation("🚀 Starting database initialization...");
+        startupLogger.LogInformation("Startup initialization started.");
         
         if (app.Environment.IsProduction())
         {
@@ -179,211 +180,235 @@ using (var scope = app.Services.CreateScope())
             var applyEfMigrations = app.Configuration.GetValue<bool>("Startup:ApplyEfMigrations");
             if (app.Environment.IsDevelopment() || applyEfMigrations)
             {
-                startupLogger.LogInformation("📊 Applying EF Core migrations...");
+                startupLogger.LogInformation("Applying EF Core migrations.");
                 dbContext.Database.Migrate();
-                startupLogger.LogInformation("✅ Migrations applied successfully");
+                startupLogger.LogInformation("EF Core migrations applied successfully.");
             }
             else
             {
-                startupLogger.LogWarning("⏭️  Skipping EF Core migrations on startup in Production. Set Startup:ApplyEfMigrations=true to force migration execution.");
+                startupLogger.LogWarning("Skipping EF Core migrations on startup in Production. Set Startup:ApplyEfMigrations=true to force migration execution.");
             }
         }
         catch (Exception migrationEx)
         {
-            startupLogger.LogError(migrationEx, "❌ Migration failed. App will continue without DB schema updates.");
+            startupLogger.LogError(migrationEx, "EF Core migration failed. App will continue without DB schema updates.");
             // Don't throw - let app start anyway for diagnostics
         }
 
         try
         {
             EnsureMemberIdentityColumns(dbContext);
-            startupLogger.LogInformation("✅ Member identity columns ensured");
+            startupLogger.LogInformation("Member identity columns ensured.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "⚠️ Failed to ensure member identity columns (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to ensure member identity columns (may already exist).");
         }
 
         try
         {
             EnsureMemberSecuritySchema(dbContext);
-            startupLogger.LogInformation("✅ Member security schema ensured");
+            startupLogger.LogInformation("Member security schema ensured.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "⚠️ Failed to ensure member security schema (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to ensure member security schema (may already exist).");
         }
 
         try
         {
             EnsureComplaintAuditSchema(dbContext);
-            startupLogger.LogInformation("✅ Complaint audit schema ensured");
+            startupLogger.LogInformation("Complaint audit schema ensured.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "⚠️ Failed to ensure complaint audit schema (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to ensure complaint audit schema (may already exist).");
         }
 
         try
         {
             EnsureReferenceDataSchema(dbContext);
-            startupLogger.LogInformation("✅ Reference data schema ensured");
+            startupLogger.LogInformation("Reference data schema ensured.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "⚠️ Failed to ensure reference data schema (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to ensure reference data schema (may already exist).");
         }
 
         try
         {
             EnsureTaskSchema(dbContext);
-            startupLogger.LogInformation("✅ Task schema ensured");
+            startupLogger.LogInformation("Task schema ensured.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "⚠️ Failed to ensure task schema (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to ensure task schema (may already exist).");
         }
 
         try
         {
             EnsureNewsSchema(dbContext);
-            startupLogger.LogInformation("✅ News schema ensured");
+            startupLogger.LogInformation("News schema ensured.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "⚠️ Failed to ensure news schema (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to ensure news schema (may already exist).");
         }
 
         try
         {
             EnsureJoinRequestsSchema(dbContext);
-            startupLogger.LogInformation("âœ… Join request schema ensured");
+            startupLogger.LogInformation("Join request schema ensured.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "âš ï¸ Failed to ensure join request schema (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to ensure join request schema (may already exist).");
         }
 
         try
         {
             SeedReferenceData(dbContext);
-            startupLogger.LogInformation("✅ Reference data seeded");
+            startupLogger.LogInformation("Reference data seeded.");
         }
         catch (Exception ex)
         {
-            startupLogger.LogWarning(ex, "⚠️ Failed to seed reference data (may already exist)");
+            startupLogger.LogWarning(ex, "Failed to seed reference data (may already exist).");
         }
 
         // Initialize President account (safe version)
         try
         {
-            var targetPresidentEmail = "president@basmet.local";
-            var targetPresidentPassword = "Test123.";
-            var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
-            var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
+            var shouldSeedPresident = app.Environment.IsDevelopment()
+                || app.Configuration.GetValue<bool>("Startup:SeedPresidentInProduction");
 
-            // FIX: Only update President account if fields have actually changed
-            // This prevents unnecessary database writes and email rewriting on every startup
-            if (president is null)
+            if (!shouldSeedPresident)
             {
-                var hashedPassword = passwordService.HashPassword(targetPresidentPassword);
-                
-                if (string.IsNullOrWhiteSpace(hashedPassword))
-                {
-                    throw new InvalidOperationException("Failed to hash president password!");
-                }
-
-                president = new Member
-                {
-                    FullName = "رئيس الكيان",
-                    Email = targetPresidentEmail.ToLowerInvariant(),
-                    NationalId = "00000000000001",
-                    BirthDate = new DateOnly(1980, 1, 1),
-                    Role = MemberRole.President,
-                    Points = 0,
-                    MustChangePassword = false,
-                    PasswordHash = hashedPassword
-                };
-
-                dbContext.Members.Add(president);
-                dbContext.SaveChanges();
-                startupLogger.LogInformation("✅ Created new President account: Email={Email}, PasswordHashLength={HashLength}", 
-                    targetPresidentEmail.ToLowerInvariant(), 
-                    hashedPassword.Length);
+                startupLogger.LogInformation("President bootstrap skipped. Set Startup:SeedPresidentInProduction=true to enable outside Development.");
             }
             else
             {
-                // Only update if needed
-                bool needsUpdate = false;
+                var configuredEmail = app.Configuration["BootstrapAdmin:Email"];
+                var targetPresidentEmail = string.IsNullOrWhiteSpace(configuredEmail)
+                    ? "president@basmet.local"
+                    : configuredEmail.Trim().ToLowerInvariant();
 
-                // Check if email needs updating
-                if (!string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase))
-                {
-                    president.Email = targetPresidentEmail.ToLowerInvariant();
-                    needsUpdate = true;
-                    startupLogger.LogInformation("🔄 President email updated: {OldEmail} → {NewEmail}", 
-                        "****", targetPresidentEmail.ToLowerInvariant());
-                }
+                var configuredPassword = app.Configuration["BootstrapAdmin:Password"];
+                var targetPresidentPassword = string.IsNullOrWhiteSpace(configuredPassword)
+                    ? (app.Environment.IsDevelopment() ? "Test123." : null)
+                    : configuredPassword;
 
-                // Only update missing fields
-                if (string.IsNullOrWhiteSpace(president.FullName))
-                {
-                    president.FullName = "رئيس الكيان";
-                    needsUpdate = true;
-                }
+                var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);
+                var passwordService = scope.ServiceProvider.GetRequiredService<IPasswordService>();
 
-                if (string.IsNullOrWhiteSpace(president.NationalId))
+                if (president is null)
                 {
-                    president.NationalId = "00000000000001";
-                    needsUpdate = true;
-                }
-
-                if (president.BirthDate is null)
-                {
-                    president.BirthDate = new DateOnly(1980, 1, 1);
-                    needsUpdate = true;
-                }
-
-                // Check if password needs updating (only if hash is invalid or missing)
-                if (string.IsNullOrWhiteSpace(president.PasswordHash))
-                {
-                    var newHash = passwordService.HashPassword(targetPresidentPassword);
-                    if (string.IsNullOrWhiteSpace(newHash))
+                    if (string.IsNullOrWhiteSpace(targetPresidentPassword))
                     {
-                        throw new InvalidOperationException("Failed to hash president password!");
+                        startupLogger.LogWarning("President bootstrap skipped because BootstrapAdmin:Password is missing in non-development environment.");
                     }
-                    president.PasswordHash = newHash;
-                    needsUpdate = true;
-                    startupLogger.LogInformation("🔐 President password hash was missing, now set");
-                }
+                    else
+                    {
+                        var hashedPassword = passwordService.HashPassword(targetPresidentPassword);
 
-                if (president.MustChangePassword != false)
-                {
-                    president.MustChangePassword = false;
-                    needsUpdate = true;
-                }
+                        if (string.IsNullOrWhiteSpace(hashedPassword))
+                        {
+                            throw new InvalidOperationException("Failed to hash president password.");
+                        }
 
-                if (needsUpdate)
-                {
-                    dbContext.SaveChanges();
-                    startupLogger.LogInformation("✅ Updated President account (only changed fields)");
+                        president = new Member
+                        {
+                            FullName = "رئيس الكيان",
+                            Email = targetPresidentEmail,
+                            NationalId = "00000000000001",
+                            BirthDate = new DateOnly(1980, 1, 1),
+                            Role = MemberRole.President,
+                            Points = 0,
+                            MustChangePassword = false,
+                            PasswordHash = hashedPassword
+                        };
+
+                        dbContext.Members.Add(president);
+                        dbContext.SaveChanges();
+                        startupLogger.LogInformation("Created President account. Email={Email}", targetPresidentEmail);
+                    }
                 }
                 else
                 {
-                    startupLogger.LogInformation("ℹ️ President account already configured correctly - skipping update");
+                    bool needsUpdate = false;
+
+                    if (!string.Equals(president.Email, targetPresidentEmail, StringComparison.OrdinalIgnoreCase))
+                    {
+                        president.Email = targetPresidentEmail;
+                        needsUpdate = true;
+                        startupLogger.LogInformation("President email normalized to configured value.");
+                    }
+
+                    if (string.IsNullOrWhiteSpace(president.FullName))
+                    {
+                        president.FullName = "رئيس الكيان";
+                        needsUpdate = true;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(president.NationalId))
+                    {
+                        president.NationalId = "00000000000001";
+                        needsUpdate = true;
+                    }
+
+                    if (president.BirthDate is null)
+                    {
+                        president.BirthDate = new DateOnly(1980, 1, 1);
+                        needsUpdate = true;
+                    }
+
+                    if (string.IsNullOrWhiteSpace(president.PasswordHash))
+                    {
+                        if (string.IsNullOrWhiteSpace(targetPresidentPassword))
+                        {
+                            startupLogger.LogWarning("President password hash is missing and BootstrapAdmin:Password is not configured. Password hash was not updated.");
+                        }
+                        else
+                        {
+                            var newHash = passwordService.HashPassword(targetPresidentPassword);
+                            if (string.IsNullOrWhiteSpace(newHash))
+                            {
+                                throw new InvalidOperationException("Failed to hash president password.");
+                            }
+
+                            president.PasswordHash = newHash;
+                            needsUpdate = true;
+                            startupLogger.LogInformation("President password hash was initialized.");
+                        }
+                    }
+
+                    if (president.MustChangePassword != false)
+                    {
+                        president.MustChangePassword = false;
+                        needsUpdate = true;
+                    }
+
+                    if (needsUpdate)
+                    {
+                        dbContext.SaveChanges();
+                        startupLogger.LogInformation("Updated President account fields that required changes.");
+                    }
+                    else
+                    {
+                        startupLogger.LogInformation("President account is already configured correctly.");
+                    }
                 }
             }
         }
         catch (Exception presidentialEx)
         {
-            startupLogger.LogError(presidentialEx, "❌ Failed to initialize President account. Continuing startup...");
+            startupLogger.LogError(presidentialEx, "Failed to initialize President account. Continuing startup.");
             // Don't throw - let app start so we can diagnose
         }
     }
     catch (Exception ex)
     {
-        startupLogger.LogCritical(ex, "❌ Critical error during startup initialization.");
-        startupLogger.LogWarning("⚠️ Application is starting despite initialization errors. Some features may be unavailable.");
+        startupLogger.LogCritical(ex, "Critical error during startup initialization.");
+        startupLogger.LogWarning("Application is starting despite initialization errors. Some features may be unavailable.");
         // Don't throw - allow app to start for diagnostics
     }
 }
@@ -692,7 +717,12 @@ app.UseExceptionHandler(errorApp =>
         var exception = exceptionHandlerPathFeature?.Error;
         
         var logger = context.RequestServices.GetRequiredService<ILogger<Program>>();
-        logger.LogError(exception, "Unhandled exception occurred");
+        logger.LogError(
+            exception,
+            "Unhandled exception occurred. Method={Method} Path={Path} TraceId={TraceId}",
+            context.Request.Method,
+            context.Request.Path.Value,
+            context.TraceIdentifier);
         
         await context.Response.WriteAsJsonAsync(new
         {
@@ -715,6 +745,65 @@ if (!app.Environment.IsDevelopment())
 app.UseCors("ClientApp");
 
 app.UseAuthentication();
+
+app.Use(async (context, next) =>
+{
+    var requestLogger = context.RequestServices
+        .GetRequiredService<ILoggerFactory>()
+        .CreateLogger("HttpRequest");
+    var stopwatch = Stopwatch.StartNew();
+
+    try
+    {
+        await next();
+    }
+    finally
+    {
+        stopwatch.Stop();
+
+        var statusCode = context.Response.StatusCode;
+        var memberId = context.User.GetMemberId()?.ToString() ?? "anonymous";
+        var method = context.Request.Method;
+        var path = context.Request.Path.Value;
+        var elapsedMs = stopwatch.Elapsed.TotalMilliseconds;
+        var traceId = context.TraceIdentifier;
+
+        if (statusCode >= StatusCodes.Status500InternalServerError)
+        {
+            requestLogger.LogError(
+                "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs:0.000} ms. TraceId={TraceId} MemberId={MemberId}",
+                method,
+                path,
+                statusCode,
+                elapsedMs,
+                traceId,
+                memberId);
+        }
+        else if (statusCode >= StatusCodes.Status400BadRequest)
+        {
+            requestLogger.LogWarning(
+                "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs:0.000} ms. TraceId={TraceId} MemberId={MemberId}",
+                method,
+                path,
+                statusCode,
+                elapsedMs,
+                traceId,
+                memberId);
+        }
+        else
+        {
+            requestLogger.LogInformation(
+                "HTTP {Method} {Path} responded {StatusCode} in {ElapsedMs:0.000} ms. TraceId={TraceId} MemberId={MemberId}",
+                method,
+                path,
+                statusCode,
+                elapsedMs,
+                traceId,
+                memberId);
+        }
+    }
+});
+
 app.UseMiddleware<PasswordChangeRequiredMiddleware>();
 app.UseMiddleware<AuditRequestContextMiddleware>();
 app.UseAuthorization();

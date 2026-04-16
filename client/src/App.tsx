@@ -2369,12 +2369,25 @@ function SuggestionsPage() {
 function ReportsPage() {
   const { dashboard, members, tasks, complaints, activityLogs } = useApp();
 
-  const downloadSheet = async (filename: string, sheetName: string, rows: string[][]) => {
-    const XLSX = await import('xlsx');
-    const workbook = XLSX.utils.book_new();
-    const worksheet = XLSX.utils.aoa_to_sheet(rows);
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-    XLSX.writeFile(workbook, filename, { bookType: 'xlsx' });
+  const toCsvCell = (value: string) => {
+    const normalized = value.replace(/\r?\n/g, ' ').trim();
+    return /[",\n]/.test(normalized)
+      ? `"${normalized.replace(/"/g, '""')}"`
+      : normalized;
+  };
+
+  const downloadSheet = (filename: string, rows: string[][]) => {
+    const csv = rows
+      .map((row) => row.map((cell) => toCsvCell(cell)).join(','))
+      .join('\r\n');
+
+    const blob = new Blob(['\ufeff', csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement('a');
+    anchor.href = url;
+    anchor.download = filename;
+    anchor.click();
+    URL.revokeObjectURL(url);
   };
 
   return (
@@ -2393,13 +2406,13 @@ function ReportsPage() {
 
       <Card title="التصدير" subtitle="Export tools" actions={<Button variant="secondary" onClick={() => window.print()}><span className="inline-flex items-center gap-2"><FiPrinter /> طباعة / PDF</span></Button>}>
         <div className="flex flex-wrap gap-3">
-          <Button onClick={() => void downloadSheet('الأعضاء.xlsx', 'الأعضاء', [['الاسم', 'البريد', 'الرقم القومي', 'تاريخ الميلاد', 'الدور', 'النقاط'], ...members.map((member) => [member.fullName, member.email, member.nationalId ?? '', member.birthDate ? formatDateOnly(member.birthDate) : '', roleLabel(member.role), String(member.points)])])}>
+          <Button onClick={() => downloadSheet('الأعضاء.csv', [['الاسم', 'البريد', 'الرقم القومي', 'تاريخ الميلاد', 'الدور', 'النقاط'], ...members.map((member) => [member.fullName, member.email, member.nationalId ?? '', member.birthDate ? formatDateOnly(member.birthDate) : '', roleLabel(member.role), String(member.points)])])}>
             <span className="inline-flex items-center gap-2"><FiDownload /> تصدير الأعضاء</span>
           </Button>
-          <Button variant="secondary" onClick={() => void downloadSheet('المهام.xlsx', 'المهام', [['العنوان', 'الوصف', 'الحالة'], ...tasks.map((task) => [task.title, task.description ?? '', task.isCompleted ? 'مكتملة' : 'قيد التنفيذ'])])}>
+          <Button variant="secondary" onClick={() => downloadSheet('المهام.csv', [['العنوان', 'الوصف', 'الحالة'], ...tasks.map((task) => [task.title, task.description ?? '', task.isCompleted ? 'مكتملة' : 'قيد التنفيذ'])])}>
             <span className="inline-flex items-center gap-2"><FiDownload /> تصدير المهام</span>
           </Button>
-          <Button variant="secondary" onClick={() => void downloadSheet('الشكاوى.xlsx', 'الشكاوى', [['الموضوع', 'مقدم الشكوى', 'الرد الإداري', 'الحالة'], ...complaints.map((item) => [item.subject, item.memberName, item.adminReply ?? '', statusLabel(item.status)])])}>
+          <Button variant="secondary" onClick={() => downloadSheet('الشكاوى.csv', [['الموضوع', 'مقدم الشكوى', 'الرد الإداري', 'الحالة'], ...complaints.map((item) => [item.subject, item.memberName, item.adminReply ?? '', statusLabel(item.status)])])}>
             <span className="inline-flex items-center gap-2"><FiDownload /> تصدير الشكاوى</span>
           </Button>
         </div>

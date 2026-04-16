@@ -2,6 +2,13 @@ namespace BasmaApi.Services;
 
 public sealed class BcryptPasswordService : IPasswordService
 {
+    private readonly ILogger<BcryptPasswordService> _logger;
+
+    public BcryptPasswordService(ILogger<BcryptPasswordService> logger)
+    {
+        _logger = logger;
+    }
+
     public string HashPassword(string password)
     {
         if (string.IsNullOrWhiteSpace(password))
@@ -29,12 +36,14 @@ public sealed class BcryptPasswordService : IPasswordService
         {
             return BCrypt.Net.BCrypt.Verify(password, passwordHash);
         }
-        catch (BCrypt.Net.SaltParseException)
+        catch (BCrypt.Net.SaltParseException ex)
         {
+            _logger.LogWarning(ex, "Password hash format is invalid.");
             return false;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Unexpected error while verifying password hash.");
             return false;
         }
     }

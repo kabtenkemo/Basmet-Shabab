@@ -47,10 +47,10 @@ public sealed class SuggestionsController : ControllerBase
 
         if (!string.IsNullOrWhiteSpace(search))
         {
-            var searchLower = search.ToLower();
+            var searchTerm = search.Trim();
             query = query.Where(s =>
-                s.Title.ToLower().Contains(searchLower) ||
-                s.Description.ToLower().Contains(searchLower));
+                EF.Functions.Like(s.Title, $"%{searchTerm}%") ||
+                EF.Functions.Like(s.Description, $"%{searchTerm}%"));
         }
 
         var suggestions = await query

@@ -15,14 +15,14 @@ public sealed class AuthController : ControllerBase
     private readonly IPasswordService _passwordService;
     private readonly IAuditLogService _auditLogService;
     private readonly ITokenService _tokenService;
-    private readonly ILogger<AuthController>? _logger;
+    private readonly ILogger<AuthController> _logger;
 
     public AuthController(
         AppDbContext dbContext, 
         IPasswordService passwordService, 
         IAuditLogService auditLogService, 
         ITokenService tokenService, 
-        ILogger<AuthController>? logger = null)
+        ILogger<AuthController> logger)
     {
         _dbContext = dbContext;
         _passwordService = passwordService;
@@ -87,7 +87,7 @@ public sealed class AuthController : ControllerBase
 
         var member = await _dbContext.Members
             .Include(candidate => candidate.PermissionGrants)
-            .FirstOrDefaultAsync(candidate => candidate.Email.ToLower() == email, cancellationToken);
+            .FirstOrDefaultAsync(candidate => candidate.Email == email, cancellationToken);
         
         if (member is null)
         {
@@ -113,8 +113,8 @@ public sealed class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "خطأ في التحقق من كلمة المرور للعضو {MemberId}", member.Id);
-            await LogFailedLogin(email, GetClientIpAddress(), $"خطأ في التحقق: {ex.Message}", cancellationToken);
+            _logger.LogError(ex, "Password verification failed for member {MemberId}", member.Id);
+            await LogFailedLogin(email, GetClientIpAddress(), "خطأ تقني في التحقق", cancellationToken);
             return Unauthorized(new { message = "خطأ تقني في التحقق. يرجى المحاولة بعد قليل." });
         }
 
@@ -182,7 +182,7 @@ public sealed class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "خطأ في تسجيل محاولة دخول فاشلة");
+            _logger.LogError(ex, "Failed to record failed-login audit entry for {Email} from {IpAddress}", email, ipAddress);
         }
     }
 
