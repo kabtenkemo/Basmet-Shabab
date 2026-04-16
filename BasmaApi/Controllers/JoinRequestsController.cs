@@ -164,8 +164,8 @@ public sealed class JoinRequestsController : ControllerBase
             }
             else if (!string.IsNullOrWhiteSpace(currentMember.GovernorName))
             {
-                var governorName = currentMember.GovernorName.Trim();
-                query = query.Where(item => item.Governorate.Name == governorName);
+                var governorName = currentMember.GovernorName.Trim().ToLower();
+                query = query.Where(item => item.Governorate.Name.ToLower() == governorName);
             }
         }
 
@@ -212,7 +212,7 @@ public sealed class JoinRequestsController : ControllerBase
 
             if (currentMember.GovernorateId is null
                 && !string.IsNullOrWhiteSpace(currentMember.GovernorName)
-                && !string.Equals(item.Governorate?.Name, currentMember.GovernorName, StringComparison.OrdinalIgnoreCase))
+                && !string.Equals(item.Governorate?.Name, currentMember.GovernorName.Trim(), StringComparison.OrdinalIgnoreCase))
             {
                 return Forbid();
             }

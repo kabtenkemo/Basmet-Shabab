@@ -100,7 +100,8 @@ public static class AccessControl
 
     public static bool CanReviewJoinRequests(Member actor)
     {
-        return actor.Role == MemberRole.President || HasPermission(actor, ReviewJoinRequestsPermission);
+        return actor.Role is MemberRole.President or MemberRole.GovernorCoordinator
+            || HasPermission(actor, ReviewJoinRequestsPermission);
     }
 
     public static bool CanManageCommitteeCatalog(Member actor)

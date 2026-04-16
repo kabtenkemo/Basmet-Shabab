@@ -155,7 +155,15 @@ function createLog(title: string, description: string, tone: ActivityLogEntry['t
 }
 
 function hasPermission(member: MemberInfo | null, permissionKey: string) {
-  return member?.permissions.some((permission) => permission.toLowerCase() === permissionKey.toLowerCase()) ?? false;
+  if (!member) {
+    return false;
+  }
+
+  if (permissionKey === 'JoinRequests.Review' && member.role === 'GovernorCoordinator') {
+    return true;
+  }
+
+  return member.permissions.some((permission) => permission.toLowerCase() === permissionKey.toLowerCase());
 }
 
 function sectionAllowed(member: MemberInfo | null, navigationItem: NavigationItem) {
@@ -298,10 +306,7 @@ export function AppProvider({ children }: PropsWithChildren) {
           console.warn('Failed to load news:', err);
           return [];
         }),
-        getLeaderboard().catch(err => {
-          console.warn('Failed to load leaderboard:', err);
-          return [] as LeaderboardEntry[];
-        })
+        getLeaderboard()
       ]);
 
       if (dashboardResult.status === 'fulfilled' && dashboardResult.value) {
@@ -322,8 +327,13 @@ export function AppProvider({ children }: PropsWithChildren) {
 
       if (leaderboardResult.status === 'fulfilled') {
         setLeaderboard(leaderboardResult.value || []);
-      } else if (dashboardResult.status === 'fulfilled' && dashboardResult.value) {
-        setLeaderboard(dashboardResult.value.topMembers ?? []);
+      } else {
+        console.warn('Failed to load leaderboard:', leaderboardResult.reason);
+        if (dashboardResult.status === 'fulfilled' && dashboardResult.value) {
+          setLeaderboard(dashboardResult.value.topMembers ?? []);
+        } else {
+          setLeaderboard([]);
+        }
       }
 
       if (currentMember.role === 'President' || currentMember.role === 'VicePresident' || hasPermission(currentMember, 'Users.Manage')) {
