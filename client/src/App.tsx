@@ -1174,21 +1174,33 @@ function NewsPage() {
 function JoinRequestsPage() {
   const { joinRequests, search, canReviewJoinRequests, reviewJoinRequestItem, loading } = useApp();
   const [joinRequestNotes, setJoinRequestNotes] = useState<Record<string, string>>({});
+  const [governorateFilter, setGovernorateFilter] = useState('');
 
   const isLoading = loading && joinRequests.length === 0;
 
+  const governorateOptions = useMemo(() => {
+    return Array.from(new Set(joinRequests.map((item) => item.governorateName).filter(Boolean)))
+      .sort((left, right) => left.localeCompare(right, 'ar'));
+  }, [joinRequests]);
+
   const filteredJoinRequests = useMemo(() => {
     const normalized = search.trim().toLowerCase();
-    return joinRequests.filter((item) => [
-      item.fullName,
-      item.email,
-      item.phoneNumber,
-      item.governorateName,
-      item.committeeName ?? '',
-      item.status,
-      item.assignedToMemberName ?? ''
-    ].join(' ').toLowerCase().includes(normalized));
-  }, [joinRequests, search]);
+    return joinRequests.filter((item) => {
+      if (governorateFilter && item.governorateName !== governorateFilter) {
+        return false;
+      }
+
+      return [
+        item.fullName,
+        item.email,
+        item.phoneNumber,
+        item.governorateName,
+        item.committeeName ?? '',
+        item.status,
+        item.assignedToMemberName ?? ''
+      ].join(' ').toLowerCase().includes(normalized);
+    });
+  }, [joinRequests, search, governorateFilter]);
 
   return (
     <div className="space-y-6">
@@ -1204,6 +1216,16 @@ function JoinRequestsPage() {
         </Card>
       ) : (
         <Card title="طلبات الالتحاق" subtitle="Join requests routed by governorate">
+          <div className="mb-4 grid gap-3 md:grid-cols-2">
+            <Field label="المحافظة">
+              <Select value={governorateFilter} onChange={(event) => setGovernorateFilter(event.target.value)}>
+                <option value="">الكل</option>
+                {governorateOptions.map((name) => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </Select>
+            </Field>
+          </div>
           {isLoading ? (
             <EmptyState title="جاري تحميل الطلبات" description="يتم الآن جلب طلبات الالتحاق الخاصة بمحافظتك." />
           ) : filteredJoinRequests.length === 0 ? (
