@@ -295,18 +295,10 @@ public sealed class JoinRequestsController : ControllerBase
 
         _dbContext.Members.Add(newMember);
 
-        item.Status = nextStatus;
-        item.AdminNotes = string.IsNullOrWhiteSpace(request.AdminNotes) ? null : request.AdminNotes.Trim();
-        item.ReviewedAtUtc = DateTime.UtcNow;
-        item.ReviewedByMemberId = currentMember.Id;
-
-        if (item.AssignedToMemberId is null && currentMember.Role == MemberRole.GovernorCoordinator)
-        {
-            item.AssignedToMemberId = currentMember.Id;
-        }
+        _dbContext.TeamJoinRequests.Remove(item);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
-        return Ok(new { message = "تم قبول الطلب وإنشاء حساب للمتقدم." });
+        return Ok(new { message = "تم قبول الطلب وإنشاء حساب للمتقدم وحذفه من قائمة الطلبات." });
     }
 
     private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)

@@ -1279,10 +1279,11 @@ function JoinRequestsPage() {
 }
 
 function MembersPage() {
-  const { members, search, createMember, deleteMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, canReviewJoinRequests, joinRequests, reviewJoinRequestItem, user } = useApp();
+  const { members, createMember, deleteMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, user } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(1);
   const pageSize = 6;
+  const [memberSearch, setMemberSearch] = useState('');
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('CommitteeMember');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(['Users.Manage']);
@@ -1292,7 +1293,6 @@ function MembersPage() {
   const [committees, setCommittees] = useState<CommitteeOption[]>([]);
   const [scopeLoading, setScopeLoading] = useState(false);
   const [memberFormError, setMemberFormError] = useState('');
-  const [joinRequestNotes, setJoinRequestNotes] = useState<Record<string, string>>({});
   const visibleGovernorates = useMemo(() => {
     if (user?.role === 'GovernorCoordinator' && user.governorName) {
       return governorates.filter((governorate) => governorate.name === user.governorName);
@@ -1302,9 +1302,13 @@ function MembersPage() {
   }, [governorates, user?.governorName, user?.role]);
 
   const filtered = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    return members.filter((member) => [member.fullName, member.email, member.role, member.permissions.join(' ')].join(' ').toLowerCase().includes(normalized));
-  }, [members, search]);
+    const normalized = memberSearch.trim().toLowerCase();
+    if (!normalized) {
+      return members;
+    }
+
+    return members.filter((member) => [member.fullName, member.email].join(' ').toLowerCase().includes(normalized));
+  }, [members, memberSearch]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
   const memberPageRows = useMemo(() => {
@@ -1312,18 +1316,9 @@ function MembersPage() {
     return filtered.slice(start, start + pageSize);
   }, [filtered, page, pageSize]);
 
-  const filteredJoinRequests = useMemo(() => {
-    const normalized = search.trim().toLowerCase();
-    return joinRequests.filter((item) => [
-      item.fullName,
-      item.email,
-      item.phoneNumber,
-      item.governorateName,
-      item.committeeName ?? '',
-      item.status,
-      item.assignedToMemberName ?? ''
-    ].join(' ').toLowerCase().includes(normalized));
-  }, [joinRequests, search]);
+  useEffect(() => {
+    setPage(1);
+  }, [memberSearch]);
 
   useEffect(() => {
     if (!selectedMemberId && filtered[0]) {
@@ -1576,6 +1571,16 @@ function MembersPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <Card title="قائمة الأعضاء" subtitle="Members">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="max-w-md flex-1">
+              <Input
+                value={memberSearch}
+                onChange={(event) => setMemberSearch(event.target.value)}
+                placeholder="ابحث بالاسم أو البريد الإلكتروني"
+              />
+            </div>
+            <span className="text-sm text-slate-400">{filtered.length} عضو</span>
+          </div>
           <div className="space-y-3 sm:hidden">
             {memberPageRows.length === 0 ? (
               <EmptyState title="لا يوجد أعضاء" description="لن تظهر العناصر هنا إلا عند توفر بيانات الأعضاء من الـ API." />
@@ -1625,7 +1630,6 @@ function MembersPage() {
               page={page}
               pageSize={pageSize}
               onPageChange={setPage}
-              search={search}
               emptyTitle="لا يوجد أعضاء"
               emptyDescription="لن تظهر العناصر هنا إلا عند توفر بيانات الأعضاء من الـ API."
             />
