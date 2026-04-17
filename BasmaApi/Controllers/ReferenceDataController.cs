@@ -136,6 +136,56 @@ public sealed class ReferenceDataController : ControllerBase
             committee.CreatedAtUtc));
     }
 
+    [HttpDelete("{governorateId:guid}/committees/{committeeId:guid}")]
+    public async Task<IActionResult> DeleteCommittee(Guid governorateId, Guid committeeId, CancellationToken cancellationToken)
+    {
+        var currentMember = await GetCurrentMemberAsync(cancellationToken);
+        if (currentMember is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!AccessControl.CanManageCommitteeCatalog(currentMember))
+        {
+            return Forbid();
+        }
+
+        var governorate = await _dbContext.Governorates.FirstOrDefaultAsync(item => item.Id == governorateId, cancellationToken);
+        if (governorate is null)
+        {
+            return NotFound(new { message = "المحافظة غير موجودة." });
+        }
+
+        if (currentMember.Role == MemberRole.GovernorCoordinator
+            && !string.Equals(currentMember.GovernorName, governorate.Name, StringComparison.OrdinalIgnoreCase))
+        {
+            return Forbid();
+        }
+
+        var committee = await _dbContext.Committees.FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
+        if (committee is null)
+        {
+            return NotFound(new { message = "اللجنة غير موجودة." });
+        }
+
+        var hasMembers = await _dbContext.Members.AnyAsync(member => member.CommitteeId == committeeId, cancellationToken);
+        if (hasMembers)
+        {
+            return Conflict(new { message = "لا يمكن حذف اللجنة لوجود أعضاء مرتبطين بها." });
+        }
+
+        var hasJoinRequests = await _dbContext.TeamJoinRequests.AnyAsync(request => request.CommitteeId == committeeId, cancellationToken);
+        if (hasJoinRequests)
+        {
+            return Conflict(new { message = "لا يمكن حذف اللجنة لوجود طلبات انضمام مرتبطة بها." });
+        }
+
+        _dbContext.Committees.Remove(committee);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     private async Task EnsureGovernoratesSeededAsync(CancellationToken cancellationToken)
     {
         var existingNames = await _dbContext.Governorates

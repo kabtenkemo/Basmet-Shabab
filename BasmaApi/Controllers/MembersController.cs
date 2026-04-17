@@ -383,6 +383,55 @@ public sealed class MembersController : ControllerBase
         return Ok(new { message = "تم إعادة تعيين كلمة المرور بنجاح وفق إعدادات النظام." });
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var currentMember = await GetCurrentMemberAsync(cancellationToken);
+        if (currentMember is null)
+        {
+            return Unauthorized();
+        }
+
+        var member = await _dbContext.Members.FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+        if (member is null)
+        {
+            return NotFound();
+        }
+
+        if (currentMember.Id == member.Id)
+        {
+            return BadRequest(new { message = "لا يمكن حذف الحساب الحالي." });
+        }
+
+        if (member.Role == MemberRole.President && currentMember.Role != MemberRole.President)
+        {
+            return Forbid();
+        }
+
+        if (member.Role == MemberRole.VicePresident && currentMember.Role != MemberRole.President)
+        {
+            return Forbid();
+        }
+
+        if (!AccessControl.CanManageUsers(currentMember) && !AccessControl.CanManageMember(currentMember, member))
+        {
+            return Forbid();
+        }
+
+        _dbContext.Members.Remove(member);
+
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException)
+        {
+            return Conflict(new { message = "لا يمكن حذف العضو لارتباطه بمهام أو بيانات أخرى." });
+        }
+
+        return NoContent();
+    }
+
     private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)
     {
         var memberId = User.GetMemberId();

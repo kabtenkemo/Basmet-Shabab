@@ -3,7 +3,7 @@ import { FiActivity, FiArrowLeft, FiClock, FiDownload, FiEdit3, FiPlus, FiPrinte
 import { AppShell } from './components/AppShell';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PagedTable, Select, SectionTitle, StatCard, Textarea, type TableColumn } from './components/ui';
 import { useApp } from './context/AppContext';
-import { commentComplaint, createCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, createSuggestion, voteSuggestion } from './api';
+import { commentComplaint, createCommittee, deleteCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, createSuggestion, voteSuggestion } from './api';
 import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, SuggestionItem, SuggestionFormState, TaskAudienceType, TaskFormState, TaskItem, TeamJoinRequest, TeamJoinRequestCreateState, TeamJoinRequestReviewState } from './types';
 
 /**
@@ -1009,10 +1009,19 @@ function LeaderboardPage() {
 }
 
 function NewsPage() {
-  const { news, members, canManageNews, createNewsItem, loading } = useApp();
+  const { news, members, canManageNews, createNewsItem, deleteNewsItem, loading } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [newsForm, setNewsForm] = useState<NewsCreateState>(emptyNews);
   const isLoading = loading && news.length === 0;
+
+  const removeNews = async (item: NewsItem) => {
+    if (!canManageNews) return;
+    if (!window.confirm(`هل تريد حذف الخبر "${item.title}"؟`)) {
+      return;
+    }
+
+    await deleteNewsItem(item.id);
+  };
 
   const toggleRole = (role: Role) => {
     setNewsForm((current) => ({
@@ -1059,7 +1068,14 @@ function NewsPage() {
               <div key={item.id} className="rounded-3xl border border-white/10 bg-white/5 p-4">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <p className="text-lg font-bold text-white">{item.title}</p>
-                  <Badge tone="brand">{audienceLabel(item.audienceType)}</Badge>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Badge tone="brand">{audienceLabel(item.audienceType)}</Badge>
+                    {canManageNews && (
+                      <Button variant="ghost" className="px-3 py-2" onClick={() => void removeNews(item)}>
+                        <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <p className="mt-3 text-sm leading-7 text-slate-300">{item.content}</p>
                 <div className="mt-3 text-xs text-slate-400">
@@ -1233,7 +1249,7 @@ function JoinRequestsPage() {
 }
 
 function MembersPage() {
-  const { members, search, createMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, canReviewJoinRequests, joinRequests, reviewJoinRequestItem, user } = useApp();
+  const { members, search, createMember, deleteMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, canReviewJoinRequests, joinRequests, reviewJoinRequestItem, user } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(1);
   const [selectedMemberId, setSelectedMemberId] = useState('');
@@ -1389,6 +1405,11 @@ function MembersPage() {
     return false;
   }, [selectedMember, user]);
   const canGrantSelectedPermissions = canManageUsers || canManageSelectedMember;
+  const canDeleteSelectedMember = Boolean(selectedMember)
+    && (canManageUsers || canManageSelectedMember)
+    && selectedMember?.memberId !== user?.id
+    && (selectedMember?.role !== 'President' || user?.role === 'President')
+    && (selectedMember?.role !== 'VicePresident' || user?.role === 'President');
 
   const columns: TableColumn<MemberAdminItem>[] = [
     { header: 'الاسم', render: (row) => <div><p className="font-bold text-white">{row.fullName}</p><p className="text-xs text-slate-400">{row.email}</p></div> },
@@ -1497,6 +1518,16 @@ function MembersPage() {
     }
   };
 
+  const removeMember = async () => {
+    if (!selectedMember || !canDeleteSelectedMember) return;
+    if (!window.confirm(`هل تريد حذف العضو "${selectedMember.fullName}" نهائياً؟`)) {
+      return;
+    }
+
+    await deleteMember(selectedMember.memberId);
+    setSelectedMemberId('');
+  };
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -1581,6 +1612,9 @@ function MembersPage() {
               <Button className="w-full" variant="secondary" onClick={() => void savePoints()} disabled={!canManageUsers}>تعديل النقاط</Button>
 
               <Button className="w-full" variant="danger" onClick={() => void resetMemberPassword()} disabled={!canManageUsers}>إعادة تعيين كلمة المرور</Button>
+              <Button className="w-full" variant="danger" onClick={() => void removeMember()} disabled={!canDeleteSelectedMember}>
+                <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف العضو</span>
+              </Button>
             </div>
           ) : (
             <EmptyState title="اختر عضوًا" description="حدد عضوًا من الجدول لعرض أدوات الإدارة السريعة." />
@@ -2197,6 +2231,23 @@ function CommitteesPage() {
     }
   };
 
+  const removeCommittee = async (committee: CommitteeOption) => {
+    if (!canManageCommitteeCatalog) {
+      return;
+    }
+
+    if (!window.confirm(`هل تريد حذف لجنة "${committee.name}"؟`)) {
+      return;
+    }
+
+    try {
+      await deleteCommittee(committee.governorateId, committee.committeeId);
+      setCommittees((current) => current.filter((item) => item.committeeId !== committee.committeeId));
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر حذف اللجنة حاليًا.');
+    }
+  };
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -2232,9 +2283,18 @@ function CommitteesPage() {
             <div className="space-y-3">
               {committees.map((committee) => (
                 <div key={committee.committeeId} className="rounded-3xl border border-white/10 bg-white/5 p-4">
-                  <p className="font-bold text-white">{committee.name}</p>
-                  <p className="text-sm text-slate-400">{committee.governorateName}</p>
-                  <p className="mt-2 text-xs text-slate-400">{formatDate(committee.createdAtUtc)}</p>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-white">{committee.name}</p>
+                      <p className="text-sm text-slate-400">{committee.governorateName}</p>
+                      <p className="mt-2 text-xs text-slate-400">{formatDate(committee.createdAtUtc)}</p>
+                    </div>
+                    {canManageCommitteeCatalog && (
+                      <Button variant="ghost" className="px-3 py-2" onClick={() => void removeCommittee(committee)}>
+                        <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
+                      </Button>
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

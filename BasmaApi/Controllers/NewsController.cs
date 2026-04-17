@@ -144,6 +144,36 @@ public sealed class NewsController : ControllerBase
         return CreatedAtAction(nameof(List), MapNews(created));
     }
 
+    [HttpDelete("{id:guid}")]
+    public async Task<IActionResult> Delete(Guid id, CancellationToken cancellationToken)
+    {
+        var currentMember = await GetCurrentMemberAsync(cancellationToken);
+        if (currentMember is null)
+        {
+            return Unauthorized();
+        }
+
+        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
+        {
+            return Forbid();
+        }
+
+        var newsPost = await _dbContext.NewsPosts
+            .Include(item => item.TargetRoles)
+            .Include(item => item.TargetMembers)
+            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+        if (newsPost is null)
+        {
+            return NotFound();
+        }
+
+        _dbContext.NewsPosts.Remove(newsPost);
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        return NoContent();
+    }
+
     private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)
     {
         var memberId = User.GetMemberId();

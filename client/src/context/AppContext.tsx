@@ -7,6 +7,8 @@ import {
   createMember,
   createNews,
   createTask,
+  deleteMember,
+  deleteNews,
   deleteTask,
   getComplaints,
   getDashboard,
@@ -95,6 +97,7 @@ interface AppContextValue {
   logout: () => void;
   refresh: () => Promise<void>;
   createMember: (form: MemberCreateFormState) => Promise<void>;
+  deleteMember: (memberId: string) => Promise<void>;
   changeRole: (memberId: string, role: string) => Promise<void>;
   assignPermission: (memberId: string, permissionKey: string) => Promise<void>;
   changePoints: (memberId: string, form: PointFormState) => Promise<void>;
@@ -106,6 +109,7 @@ interface AppContextValue {
   createComplaintItem: (form: ComplaintFormState) => Promise<void>;
   submitJoinRequest: (form: TeamJoinRequestCreateState) => Promise<TeamJoinRequest>;
   createNewsItem: (form: NewsCreateState) => Promise<void>;
+  deleteNewsItem: (id: string) => Promise<void>;
   reviewComplaintItem: (id: string, review: ComplaintReviewState) => Promise<void>;
   reviewJoinRequestItem: (id: string, review: TeamJoinRequestReviewState) => Promise<void>;
   clearError: () => void;
@@ -545,6 +549,21 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [appendActivity, loadSession]);
 
+  const deleteMemberItem = useCallback(async (memberId: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      await deleteMember(memberId);
+      appendActivity('حذف عضو', 'تم حذف عضو من النظام', 'warning');
+      await loadSession();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'تعذر حذف العضو');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession]);
+
   const refresh = useCallback(() => loadSession(), [loadSession]);
   const clearError = useCallback(() => setError(''), []);
 
@@ -709,6 +728,21 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [appendActivity, loadSession]);
 
+  const deleteNewsItem = useCallback(async (id: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      await deleteNews(id);
+      appendActivity('حذف خبر', 'تم حذف خبر من القائمة', 'warning');
+      await loadSession();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'تعذر حذف الخبر');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession]);
+
   const reviewComplaintItem = useCallback(async (id: string, review: ComplaintReviewState) => {
     setLoading(true);
     setError('');
@@ -771,6 +805,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     logout,
     refresh,
     createMember: createMemberItem,
+    deleteMember: deleteMemberItem,
     changeRole,
     assignPermission,
     changePoints,
@@ -782,6 +817,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     createComplaintItem,
     submitJoinRequest,
     createNewsItem,
+    deleteNewsItem,
     reviewComplaintItem,
     reviewJoinRequestItem,
     clearError,
@@ -804,6 +840,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     submitJoinRequest,
     createNewsItem,
     createMemberItem,
+    deleteMemberItem,
     createTaskItem,
     dashboard,
     leaderboard,
@@ -830,6 +867,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     changePoints,
     changeRole,
     changePassword,
+    deleteNewsItem,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

@@ -260,6 +260,10 @@ export async function getMembers() {
   return request<MemberAdminItem[]>({ method: 'GET', url: '/api/members' });
 }
 
+export async function deleteMember(memberId: string) {
+  return request({ method: 'DELETE', url: `/api/members/${memberId}` });
+}
+
 export async function createMember(form: MemberCreateFormState) {
   return request<MemberAdminItem>({
     method: 'POST',
@@ -284,6 +288,10 @@ export async function getGovernorateCommittees(governorateId: string) {
 
 export async function createCommittee(governorateId: string, form: CommitteeCreateFormState) {
   return request<CommitteeOption>({ method: 'POST', url: `/api/governorates/${governorateId}/committees`, data: form });
+}
+
+export async function deleteCommittee(governorateId: string, committeeId: string) {
+  return request({ method: 'DELETE', url: `/api/governorates/${governorateId}/committees/${committeeId}` });
 }
 
 export async function createJoinRequest(form: TeamJoinRequestCreateState) {
@@ -414,6 +422,10 @@ export async function getNews() {
 
 export async function createNews(form: NewsCreateState) {
   return request<NewsItem>({ method: 'POST', url: '/api/news', data: form });
+}
+
+export async function deleteNews(id: string) {
+  return request({ method: 'DELETE', url: `/api/news/${id}` });
 }
 
 export async function getSuggestions(status?: string) {
