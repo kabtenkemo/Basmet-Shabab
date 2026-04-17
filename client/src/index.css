@@ -14,6 +14,7 @@ html,
 body,
 #root {
   min-height: 100%;
+  width: 100%;
 }
 
 body {
@@ -23,10 +24,19 @@ body {
     radial-gradient(circle at right bottom, rgba(245, 158, 11, 0.14), transparent 28%),
     linear-gradient(180deg, #020617 0%, #0f172a 100%);
   color: #e2e8f0;
+  overflow-x: hidden;
 }
 
 * {
   box-sizing: border-box;
+}
+
+img,
+video,
+canvas,
+svg {
+  max-width: 100%;
+  height: auto;
 }
 
 ::selection {

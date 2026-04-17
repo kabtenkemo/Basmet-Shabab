@@ -919,7 +919,7 @@ function OverviewPage() {
             {leaderboard.length === 0 ? (
               <EmptyState title="لا توجد بيانات بعد" description="ستظهر قائمة المتصدرين هنا عند توفر النقاط." />
             ) : leaderboard.map((entry) => (
-              <div key={entry.memberId} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+              <div key={entry.memberId} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                 <div>
                   <p className="font-bold text-white">#{entry.rank} {entry.fullName}</p>
                   <p className="text-sm text-slate-400">{roleLabel(entry.role)}</p>
@@ -936,7 +936,7 @@ function OverviewPage() {
               <EmptyState title="لا يوجد نشاط بعد" description="سجل الأعمال سيظهر هنا بعد تنفيذ أي عملية داخل النظام." />
             ) : activityLogs.map((item) => (
               <div key={item.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-bold text-white">{item.title}</p>
                   <Badge tone={item.tone === 'warning' ? 'warning' : item.tone === 'success' ? 'success' : 'neutral'}>{formatDate(item.createdAtUtc)}</Badge>
                 </div>
@@ -954,7 +954,7 @@ function OverviewPage() {
           <div className="space-y-3">
             {news.slice(0, 4).map((item) => (
               <div key={item.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
-                <div className="flex items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
                   <p className="font-bold text-white">{item.title}</p>
                   <Badge tone="brand">{audienceLabel(item.audienceType)}</Badge>
                 </div>
@@ -2790,7 +2790,7 @@ function ProfilePage() {
               {leaderboard.length === 0 ? (
                 <EmptyState title="لا توجد بيانات بعد" description="ستظهر قائمة المتصدرين هنا عند توفر النقاط." />
               ) : leaderboard.map((entry) => (
-                <div key={entry.memberId} className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
+                <div key={entry.memberId} className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-white/10 bg-white/5 px-4 py-3">
                   <div>
                     <p className="font-bold text-white">#{entry.rank} {entry.fullName}</p>
                     <p className="text-sm text-slate-400">{roleLabel(entry.role)}</p>
