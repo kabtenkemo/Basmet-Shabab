@@ -83,6 +83,7 @@ interface AppContextValue {
   importantContacts: ImportantContactItem[];
   myComplaints: ComplaintItem[];
   activityLogs: ActivityLogEntry[];
+  notice: { title: string; description: string; tone: ActivityLogEntry['tone'] } | null;
   section: SectionKey;
   theme: ThemeMode;
   search: string;
@@ -122,6 +123,7 @@ interface AppContextValue {
   createImportantContact: (form: ImportantContactCreateState) => Promise<void>;
   deleteImportantContact: (contactId: string) => Promise<void>;
   clearError: () => void;
+  clearNotice: () => void;
   addActivity: (title: string, description: string, tone?: ActivityLogEntry['tone']) => void;
 }
 
@@ -226,6 +228,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [importantContacts, setImportantContacts] = useState<ImportantContactItem[]>([]);
   const [myComplaints, setMyComplaints] = useState<ComplaintItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
+  const [notice, setNotice] = useState<{ title: string; description: string; tone: ActivityLogEntry['tone'] } | null>(null);
   const [section, setSection] = useState<SectionKey>('overview');
   const theme: ThemeMode = 'dark';
   const [search, setSearch] = useState(defaultSearch);
@@ -279,7 +282,24 @@ export function AppProvider({ children }: PropsWithChildren) {
 
   const appendActivity = useCallback((title: string, description: string, tone: ActivityLogEntry['tone'] = 'info') => {
     setActivityLogs((current) => [createLog(title, description, tone), ...current].slice(0, 30));
+    setNotice({ title, description, tone });
   }, []);
+
+  const clearNotice = useCallback(() => {
+    setNotice(null);
+  }, []);
+
+  useEffect(() => {
+    if (!notice) {
+      return;
+    }
+
+    const timer = window.setTimeout(() => {
+      setNotice(null);
+    }, 3500);
+
+    return () => window.clearTimeout(timer);
+  }, [notice]);
 
   const loadSession = useCallback(async (currentToken?: string | null) => {
     const authToken = currentToken ?? token;
@@ -494,7 +514,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       });
       setToken(response.token);
       setStoredToken(response.token);
-      setActivityLogs((current) => [createLog('تسجيل الدخول', `تم تسجيل دخول ${response.fullName}`, 'success'), ...current]);
+      appendActivity('تسجيل الدخول', `تم تسجيل دخول ${response.fullName}`, 'success');
     } catch (loginError) {
       let errorMessage = 'تعذر تنفيذ عملية تسجيل الدخول';
       
@@ -846,6 +866,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     importantContacts,
     myComplaints,
     activityLogs,
+    notice,
     section,
     theme,
     search,
@@ -885,6 +906,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     reviewComplaintItem,
     reviewJoinRequestItem,
     clearError,
+    clearNotice,
     addActivity: appendActivity
   }), [
     activityLogs,
@@ -909,6 +931,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     deleteMemberItem,
     createTaskItem,
     createImportantContactItem,
+    notice,
     dashboard,
     leaderboard,
     deleteTaskItem,
@@ -931,6 +954,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     updateTaskItem,
     user,
     clearError,
+    clearNotice,
     changePoints,
     changeRole,
     changePassword,

@@ -2225,7 +2225,7 @@ function ComplaintsPage() {
 }
 
 function CommitteesPage() {
-  const { user } = useApp();
+  const { user, addActivity } = useApp();
   const [governorates, setGovernorates] = useState<GovernorateOption[]>([]);
   const [selectedGovernorateId, setSelectedGovernorateId] = useState('');
   const [committees, setCommittees] = useState<CommitteeOption[]>([]);
@@ -2306,6 +2306,9 @@ function CommitteesPage() {
       await createCommittee(selectedGovernorateId, form);
       setForm(emptyCommittee);
       setCommittees(await getGovernorateCommittees(selectedGovernorateId));
+      if (addActivity) {
+        addActivity('إضافة لجنة', `تمت إضافة لجنة ${form.name}`, 'success');
+      }
     } catch {
       return;
     }
@@ -2323,6 +2326,9 @@ function CommitteesPage() {
     try {
       await deleteCommittee(committee.governorateId, committee.committeeId);
       setCommittees((current) => current.filter((item) => item.committeeId !== committee.committeeId));
+      if (addActivity) {
+        addActivity('حذف لجنة', `تم حذف لجنة ${committee.name}`, 'warning');
+      }
     } catch (error) {
       window.alert(error instanceof Error ? error.message : 'تعذر حذف اللجنة حاليًا.');
     }

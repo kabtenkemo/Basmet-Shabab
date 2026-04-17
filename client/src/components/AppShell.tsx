@@ -20,7 +20,7 @@ const icons: Record<string, ReactNode> = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, navigation, section, setSection, logout, search, setSearch, error, clearError } = useApp();
+  const { user, navigation, section, setSection, logout, search, setSearch, error, clearError, notice, clearNotice } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(search);
   const isLight = false;
@@ -152,6 +152,26 @@ export function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
+
+        {notice && (
+          <div className={`border-b px-4 py-3 text-sm sm:px-6 lg:px-8 ${
+            notice.tone === 'success'
+              ? 'border-emerald-400/25 bg-emerald-400/10 text-emerald-100'
+              : notice.tone === 'warning'
+              ? 'border-amber-400/25 bg-amber-400/10 text-amber-100'
+              : 'border-sky-400/25 bg-sky-400/10 text-sky-100'
+          }`}>
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <p className="font-bold">{notice.title}</p>
+                <p className="text-xs text-slate-100/90">{notice.description}</p>
+              </div>
+              <button type="button" className="rounded-full border border-white/20 px-3 py-1 text-xs font-bold text-white/90 transition hover:bg-white/10" onClick={clearNotice}>
+                إغلاق
+              </button>
+            </div>
+          </div>
+        )}
 
         {error && (
           <div className="border-b border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-100 sm:px-6 lg:px-8">
