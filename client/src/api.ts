@@ -16,6 +16,8 @@ import type {
   CommitteeCreateFormState,
   CommitteeOption,
   GovernorateOption,
+  ImportantContactCreateState,
+  ImportantContactItem,
   LeaderboardEntry,
   MemberAdminItem,
   MemberCreateFormState,
@@ -258,6 +260,27 @@ export async function getLeaderboard() {
 
 export async function getMembers() {
   return request<MemberAdminItem[]>({ method: 'GET', url: '/api/members' });
+}
+
+export async function getImportantContacts() {
+  return request<ImportantContactItem[]>({ method: 'GET', url: '/api/important-contacts' });
+}
+
+export async function createImportantContact(form: ImportantContactCreateState) {
+  return request<ImportantContactItem>({
+    method: 'POST',
+    url: '/api/important-contacts',
+    data: {
+      fullName: form.fullName.trim(),
+      phoneNumber: form.phoneNumber.trim(),
+      positionTitle: form.positionTitle.trim(),
+      domain: form.domain.trim()
+    }
+  });
+}
+
+export async function deleteImportantContact(contactId: string) {
+  return request({ method: 'DELETE', url: `/api/important-contacts/${contactId}` });
 }
 
 export async function deleteMember(memberId: string) {

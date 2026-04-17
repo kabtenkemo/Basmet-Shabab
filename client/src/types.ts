@@ -16,6 +16,7 @@ export type SectionKey =
   | 'complaints'
   | 'auditlogs'
   | 'committees'
+  | 'importantcontacts'
   | 'suggestions'
   | 'reports'
   | 'profile';
@@ -264,6 +265,22 @@ export type CommitteeOption = {
 
 export type CommitteeCreateFormState = {
   name: string;
+};
+
+export type ImportantContactItem = {
+  id: string;
+  fullName: string;
+  phoneNumber: string;
+  positionTitle: string;
+  domain: string;
+  createdAtUtc: string;
+};
+
+export type ImportantContactCreateState = {
+  fullName: string;
+  phoneNumber: string;
+  positionTitle: string;
+  domain: string;
 };
 
 export type SuggestionStatus = 'Open' | 'Accepted' | 'Rejected';

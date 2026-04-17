@@ -300,7 +300,7 @@ using (var scope = app.Services.CreateScope())
 
                 var configuredPassword = app.Configuration["BootstrapAdmin:Password"];
                 var targetPresidentPassword = string.IsNullOrWhiteSpace(configuredPassword)
-                    ? (app.Environment.IsDevelopment() ? "Test123." : null)
+                    ? (app.Environment.IsDevelopment() ? "Test123" : null)
                     : configuredPassword;
 
                 var president = dbContext.Members.FirstOrDefault(member => member.Role == MemberRole.President);

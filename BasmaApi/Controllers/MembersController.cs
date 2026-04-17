@@ -591,7 +591,7 @@ public sealed class MembersController : ControllerBase
 
         if (_environment.IsDevelopment())
         {
-            return "Test123.";
+            return "Test123";
         }
 
         throw new InvalidOperationException("Members:DefaultPassword must be configured outside Development.");

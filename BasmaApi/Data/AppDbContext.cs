@@ -62,6 +62,8 @@ public sealed class AppDbContext : DbContext
 
     public DbSet<TeamJoinRequest> TeamJoinRequests => Set<TeamJoinRequest>();
 
+    public DbSet<ImportantContact> ImportantContacts => Set<ImportantContact>();
+
     public override int SaveChanges()
     {
         AppendAuditLogs();
@@ -298,6 +300,21 @@ public sealed class AppDbContext : DbContext
                 .WithMany()
                 .HasForeignKey(vote => vote.VotedByMemberId)
                 .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ImportantContact>(entity =>
+        {
+            entity.HasIndex(item => item.Domain);
+            entity.HasIndex(item => item.CreatedByMemberId);
+            entity.Property(item => item.FullName).HasMaxLength(150);
+            entity.Property(item => item.PhoneNumber).HasMaxLength(40);
+            entity.Property(item => item.PositionTitle).HasMaxLength(120);
+            entity.Property(item => item.Domain).HasMaxLength(80);
+
+            entity.HasOne(item => item.CreatedByMember)
+                .WithMany()
+                .HasForeignKey(item => item.CreatedByMemberId)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<TeamJoinRequest>(entity =>

@@ -3,15 +3,18 @@ import {
   adjustPoints,
   changePassword as submitPasswordChangeRequest,
   createComplaint,
+  createImportantContact,
   createJoinRequest,
   createMember,
   createNews,
   createTask,
+  deleteImportantContact,
   deleteMember,
   deleteNews,
   deleteTask,
   getComplaints,
   getDashboard,
+  getImportantContacts,
   getJoinRequests,
   getLeaderboard,
   getMembers,
@@ -37,6 +40,8 @@ import type {
   ComplaintReviewState,
   DashboardMe,
   DashboardOverview,
+  ImportantContactCreateState,
+  ImportantContactItem,
   LeaderboardEntry,
   MemberAdminItem,
   MemberCreateFormState,
@@ -75,6 +80,7 @@ interface AppContextValue {
   complaints: ComplaintItem[];
   joinRequests: TeamJoinRequest[];
   news: NewsItem[];
+  importantContacts: ImportantContactItem[];
   myComplaints: ComplaintItem[];
   activityLogs: ActivityLogEntry[];
   section: SectionKey;
@@ -90,6 +96,7 @@ interface AppContextValue {
   canReviewJoinRequests: boolean;
   canViewReports: boolean;
   canManageNews: boolean;
+  canManageImportantContacts: boolean;
   navigation: NavigationItem[];
   setSection: (section: SectionKey) => void;
   setSearch: (value: string) => void;
@@ -112,6 +119,8 @@ interface AppContextValue {
   deleteNewsItem: (id: string) => Promise<void>;
   reviewComplaintItem: (id: string, review: ComplaintReviewState) => Promise<void>;
   reviewJoinRequestItem: (id: string, review: TeamJoinRequestReviewState) => Promise<void>;
+  createImportantContact: (form: ImportantContactCreateState) => Promise<void>;
+  deleteImportantContact: (contactId: string) => Promise<void>;
   clearError: () => void;
   addActivity: (title: string, description: string, tone?: ActivityLogEntry['tone']) => void;
 }
@@ -128,6 +137,7 @@ const sectionLabels: Partial<Record<SectionKey, string>> = {
   complaints: 'الشكاوى',
   auditlogs: 'سجل التدقيق',
   committees: 'اللجان',
+  importantcontacts: 'الشخصيات الهامة',
   reports: 'التقارير',
   suggestions: 'المقترحات',
   profile: 'الملف الشخصي'
@@ -143,6 +153,7 @@ const navigationSeed: NavigationItem[] = [
   { key: 'complaints', label: 'الشكاوى', icon: 'message', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'auditlogs', label: 'سجل التدقيق', icon: 'activity', roles: ['President'] },
   { key: 'committees', label: 'اللجان', icon: 'layers', roles: ['President', 'VicePresident', 'GovernorCoordinator'] },
+  { key: 'importantcontacts', label: 'الشخصيات الهامة', icon: 'phone', roles: ['President', 'VicePresident'] },
   { key: 'suggestions', label: 'المقترحات', icon: 'suggestions', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'reports', label: 'التقارير', icon: 'chart', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator'] },
   { key: 'profile', label: 'الملف الشخصي', icon: 'profile', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] }
@@ -212,6 +223,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [complaints, setComplaints] = useState<ComplaintItem[]>([]);
   const [joinRequests, setJoinRequests] = useState<TeamJoinRequest[]>([]);
   const [news, setNews] = useState<NewsItem[]>([]);
+  const [importantContacts, setImportantContacts] = useState<ImportantContactItem[]>([]);
   const [myComplaints, setMyComplaints] = useState<ComplaintItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
   const [section, setSection] = useState<SectionKey>('overview');
@@ -259,6 +271,10 @@ export function AppProvider({ children }: PropsWithChildren) {
     return user ? user.role === 'President' || user.role === 'VicePresident' : false;
   }, [user]);
 
+  const canManageImportantContacts = useMemo(() => {
+    return user ? user.role === 'President' || user.role === 'VicePresident' : false;
+  }, [user]);
+
   const navigation = useMemo(() => navigationSeed.filter((item) => sectionAllowed(user, item)), [user]);
 
   const appendActivity = useCallback((title: string, description: string, tone: ActivityLogEntry['tone'] = 'info') => {
@@ -289,6 +305,7 @@ export function AppProvider({ children }: PropsWithChildren) {
         setComplaints([]);
         setJoinRequests([]);
         setNews([]);
+        setImportantContacts([]);
         setMyComplaints([]);
         return;
       }
@@ -378,6 +395,16 @@ export function AppProvider({ children }: PropsWithChildren) {
         setJoinRequests([]);
       }
 
+      if (currentMember.role === 'President' || currentMember.role === 'VicePresident') {
+        const importantContactsResult = await getImportantContacts().catch(err => {
+          console.warn('Failed to load important contacts:', err);
+          return [] as ImportantContactItem[];
+        });
+        setImportantContacts(importantContactsResult || []);
+      } else {
+        setImportantContacts([]);
+      }
+
       setSection((currentSection) => {
         const allowed = navigationSeed.some((item) => item.key === currentSection && sectionAllowed(currentMember, item));
         return allowed ? currentSection : 'overview';
@@ -410,6 +437,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setComplaints([]);
       setJoinRequests([]);
       setNews([]);
+      setImportantContacts([]);
       setMyComplaints([]);
       setSection('overview');
     }
@@ -505,6 +533,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setComplaints([]);
     setJoinRequests([]);
     setNews([]);
+    setImportantContacts([]);
     setMyComplaints([]);
     setSection('overview');
     setSearch('');
@@ -524,6 +553,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setComplaints([]);
       setJoinRequests([]);
       setNews([]);
+      setImportantContacts([]);
       setMyComplaints([]);
       setSection('overview');
       setSearch('');
@@ -743,6 +773,36 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [appendActivity, loadSession]);
 
+  const createImportantContactItem = useCallback(async (form: ImportantContactCreateState) => {
+    setLoading(true);
+    setError('');
+    try {
+      await createImportantContact(form);
+      appendActivity('إضافة شخصية هامة', `تمت إضافة ${form.fullName}`, 'success');
+      await loadSession();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'تعذر إضافة الشخصية الهامة');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession]);
+
+  const deleteImportantContactItem = useCallback(async (contactId: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      await deleteImportantContact(contactId);
+      appendActivity('حذف شخصية هامة', 'تم حذف بيانات شخصية هامة', 'warning');
+      await loadSession();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'تعذر حذف الشخصية الهامة');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession]);
+
   const reviewComplaintItem = useCallback(async (id: string, review: ComplaintReviewState) => {
     setLoading(true);
     setError('');
@@ -783,6 +843,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     complaints,
     joinRequests,
     news,
+    importantContacts,
     myComplaints,
     activityLogs,
     section,
@@ -798,6 +859,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     canReviewJoinRequests,
     canViewReports,
     canManageNews,
+    canManageImportantContacts,
     navigation,
     setSection,
     setSearch,
@@ -818,6 +880,8 @@ export function AppProvider({ children }: PropsWithChildren) {
     submitJoinRequest,
     createNewsItem,
     deleteNewsItem,
+    createImportantContact: createImportantContactItem,
+    deleteImportantContact: deleteImportantContactItem,
     reviewComplaintItem,
     reviewJoinRequestItem,
     clearError,
@@ -833,15 +897,18 @@ export function AppProvider({ children }: PropsWithChildren) {
     canManageUsers,
     canViewReports,
     canManageNews,
+    canManageImportantContacts,
     complaints,
     joinRequests,
     news,
+    importantContacts,
     createComplaintItem,
     submitJoinRequest,
     createNewsItem,
     createMemberItem,
     deleteMemberItem,
     createTaskItem,
+    createImportantContactItem,
     dashboard,
     leaderboard,
     deleteTaskItem,
@@ -868,6 +935,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     changeRole,
     changePassword,
     deleteNewsItem,
+    deleteImportantContactItem,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

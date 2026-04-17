@@ -4,7 +4,7 @@ import { AppShell } from './components/AppShell';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PagedTable, Select, SectionTitle, StatCard, Textarea, type TableColumn } from './components/ui';
 import { useApp } from './context/AppContext';
 import { commentComplaint, createCommittee, deleteCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, createSuggestion, voteSuggestion } from './api';
-import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, SuggestionItem, SuggestionFormState, TaskAudienceType, TaskFormState, TaskItem, TeamJoinRequest, TeamJoinRequestCreateState, TeamJoinRequestReviewState } from './types';
+import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, ImportantContactCreateState, ImportantContactItem, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, SuggestionItem, SuggestionFormState, TaskAudienceType, TaskFormState, TaskItem, TeamJoinRequest, TeamJoinRequestCreateState, TeamJoinRequestReviewState } from './types';
 
 /**
  * Extract birthDate (YYYY-MM-DD) from Egyptian National ID
@@ -70,6 +70,24 @@ const emptyMember: MemberCreateFormState = {
 
 const emptyCommittee: CommitteeCreateFormState = {
   name: ''
+};
+
+const importantContactDomains = [
+  'حكومي',
+  'إعلام',
+  'تعليم',
+  'صحة',
+  'قطاع خاص',
+  'مجتمع مدني',
+  'شباب ورياضة',
+  'تقني'
+];
+
+const emptyImportantContact: ImportantContactCreateState = {
+  fullName: '',
+  phoneNumber: '',
+  positionTitle: '',
+  domain: ''
 };
 
 const emptyPoint: PointFormState = {
@@ -200,6 +218,11 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string; descripti
     title: 'إدارة اللجان ونطاقات العمل',
     description: 'واجهة جاهزة لإدارة اللجان وربطها بالمحافظات وتعيين المنسقين.'
   },
+  importantcontacts: {
+    eyebrow: 'Key Contacts',
+    title: 'أرقام الشخصيات الهامة',
+    description: 'قائمة موحدة للتواصل مع الشخصيات الهامة حسب المجال والمنصب.'
+  },
   suggestions: {
     eyebrow: 'Suggestions',
     title: 'نظام المقترحات والتصويت',
@@ -279,6 +302,10 @@ function isSameScopeName(left: string | null | undefined, right: string | null |
   return normalizeScopeName(left) === normalizeScopeName(right);
 }
 
+function hasAtLeastTwoNameParts(value: string) {
+  return value.trim().split(/\s+/).filter(Boolean).length >= 2;
+}
+
 function safeJsonParse(value: string | null | undefined) {
   if (!value) {
     return null;
@@ -331,6 +358,7 @@ const sectionPathByKey: Record<SectionKey, string> = {
   complaints: '/complaints',
   auditlogs: '/audit-logs',
   committees: '/committees',
+  importantcontacts: '/important-contacts',
   suggestions: '/suggestions',
   reports: '/reports',
   profile: '/profile'
@@ -350,6 +378,8 @@ const sectionByPath: Record<string, SectionKey> = {
   '/audit-logs': 'auditlogs',
   '/auditlogs': 'auditlogs',
   '/committees': 'committees',
+  '/important-contacts': 'importantcontacts',
+  '/importantcontacts': 'importantcontacts',
   '/suggestions': 'suggestions',
   '/reports': 'reports',
   '/profile': 'profile'
@@ -2355,6 +2385,160 @@ function CommitteesPage() {
   );
 }
 
+function ImportantContactsPage() {
+  const { importantContacts, createImportantContact, deleteImportantContact, loading, search } = useApp();
+  const [page, setPage] = useState(1);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [form, setForm] = useState<ImportantContactCreateState>(emptyImportantContact);
+  const [formError, setFormError] = useState('');
+
+  const filtered = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+    if (!normalized) {
+      return importantContacts;
+    }
+
+    return importantContacts.filter((item) => [
+      item.fullName,
+      item.phoneNumber,
+      item.positionTitle,
+      item.domain
+    ].join(' ').toLowerCase().includes(normalized));
+  }, [importantContacts, search]);
+
+  const isLoading = loading && importantContacts.length === 0;
+
+  const removeContact = async (item: ImportantContactItem) => {
+    if (!window.confirm(`هل تريد حذف رقم ${item.fullName}؟`)) {
+      return;
+    }
+
+    await deleteImportantContact(item.id);
+  };
+
+  const submit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setFormError('');
+
+    if (!form.fullName.trim() || !hasAtLeastTwoNameParts(form.fullName)) {
+      setFormError('يرجى إدخال الاسم الثنائي بشكل صحيح.');
+      return;
+    }
+
+    if (!form.phoneNumber.trim() || form.phoneNumber.trim().length < 8) {
+      setFormError('يرجى إدخال رقم هاتف صحيح.');
+      return;
+    }
+
+    if (!form.positionTitle.trim()) {
+      setFormError('يرجى إدخال المنصب.');
+      return;
+    }
+
+    if (!form.domain.trim()) {
+      setFormError('يرجى اختيار المجال.');
+      return;
+    }
+
+    await createImportantContact(form);
+    setForm(emptyImportantContact);
+    setCreateOpen(false);
+    setPage(1);
+  };
+
+  const columns: TableColumn<ImportantContactItem>[] = [
+    {
+      header: 'الاسم',
+      render: (row) => (
+        <div>
+          <p className="font-bold text-white">{row.fullName}</p>
+          <p className="text-xs text-slate-400">{row.positionTitle}</p>
+        </div>
+      )
+    },
+    {
+      header: 'المجال',
+      render: (row) => <Badge tone="brand">{row.domain}</Badge>
+    },
+    {
+      header: 'الهاتف',
+      render: (row) => <span className="text-sm text-slate-200">{row.phoneNumber}</span>
+    },
+    {
+      header: 'أضيف في',
+      render: (row) => <span className="text-xs text-slate-400">{formatDate(row.createdAtUtc)}</span>
+    },
+    {
+      header: 'إجراءات',
+      render: (row) => (
+        <Button variant="ghost" onClick={() => void removeContact(row)}>
+          <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
+        </Button>
+      )
+    }
+  ];
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow={pageTitles.importantcontacts.eyebrow}
+        title={pageTitles.importantcontacts.title}
+        description={pageTitles.importantcontacts.description}
+        actions={<Button onClick={() => setCreateOpen(true)}><span className="inline-flex items-center gap-2"><FiPlus /> إضافة رقم</span></Button>}
+      />
+
+      <Card title="قائمة الشخصيات الهامة" subtitle="Key contacts">
+        {isLoading ? (
+          <EmptyState title="جاري التحميل" description="يتم الآن تحميل أرقام الشخصيات الهامة." />
+        ) : (
+          <PagedTable
+            rows={filtered}
+            columns={columns}
+            rowKey={(row) => row.id}
+            page={page}
+            pageSize={6}
+            onPageChange={setPage}
+            search={search}
+            emptyTitle="لا توجد بيانات"
+            emptyDescription="قم بإضافة أول رقم شخصية هامة ليظهر هنا."
+          />
+        )}
+      </Card>
+
+      <Modal
+        open={createOpen}
+        onClose={() => setCreateOpen(false)}
+        title="إضافة شخصية هامة"
+        subtitle="Key contact form"
+        footer={<><Button variant="ghost" onClick={() => setCreateOpen(false)}>إلغاء</Button><Button type="submit" form="important-contact-form"><span className="inline-flex items-center gap-2"><FiSave /> حفظ</span></Button></>}
+      >
+        <form id="important-contact-form" className="space-y-4" onSubmit={(event) => void submit(event)}>
+          {formError && (
+            <div className="rounded-2xl border border-rose-400/30 bg-rose-400/10 px-4 py-3 text-sm text-rose-100">
+              {formError}
+            </div>
+          )}
+          <Field label="الاسم الثنائي">
+            <Input value={form.fullName} onChange={(event) => setForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="مثال: أحمد علي" />
+          </Field>
+          <Field label="رقم الهاتف">
+            <Input value={form.phoneNumber} onChange={(event) => setForm((current) => ({ ...current, phoneNumber: event.target.value }))} placeholder="01xxxxxxxxx" type="tel" />
+          </Field>
+          <Field label="المنصب">
+            <Input value={form.positionTitle} onChange={(event) => setForm((current) => ({ ...current, positionTitle: event.target.value }))} placeholder="مثال: مدير شراكات" />
+          </Field>
+          <Field label="المجال">
+            <Select value={form.domain} onChange={(event) => setForm((current) => ({ ...current, domain: event.target.value }))}>
+              <option value="">اختر المجال</option>
+              {importantContactDomains.map((domain) => <option key={domain} value={domain}>{domain}</option>)}
+            </Select>
+          </Field>
+        </form>
+      </Modal>
+    </div>
+  );
+}
+
 function SuggestionsPage() {
   const { addActivity } = useApp();
   const [suggestions, setSuggestions] = useState<SuggestionItem[]>([]);
@@ -3021,6 +3205,7 @@ export default function App() {
     complaints: <ComplaintsPage />,
     auditlogs: <AuditLogsPage />,
     committees: <CommitteesPage />,
+    importantcontacts: <ImportantContactsPage />,
     suggestions: <SuggestionsPage />,
     reports: <ReportsPage />,
     profile: <ProfilePage />
