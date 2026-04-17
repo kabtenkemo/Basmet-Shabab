@@ -1228,9 +1228,9 @@ function JoinRequestsPage() {
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-300">
                       <p>اللجنة: {item.committeeName ?? 'غير محددة'}</p>
+                      <p className="mt-1">المحافظة: {item.governorateName}</p>
                       <p className="mt-1">الرقم القومي: {item.nationalId ?? '—'}</p>
                       <p className="mt-1">تاريخ الميلاد: {item.birthDate ? formatDateOnly(item.birthDate) : '—'}</p>
-                      <p className="mt-1">المحول إليه: {item.assignedToMemberName ?? 'سيظهر عند التوزيع'}</p>
                       <p className="mt-1">تاريخ الإرسال: {formatDate(item.createdAtUtc)}</p>
                     </div>
                     <div className="rounded-2xl border border-white/10 bg-slate-950/40 p-3 text-sm text-slate-300">
