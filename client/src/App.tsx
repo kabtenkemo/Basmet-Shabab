@@ -1252,6 +1252,7 @@ function MembersPage() {
   const { members, search, createMember, deleteMember, changeRole, assignPermission, changePoints, resetPassword, canManageUsers, canCreateMembers, canReviewJoinRequests, joinRequests, reviewJoinRequestItem, user } = useApp();
   const [createOpen, setCreateOpen] = useState(false);
   const [page, setPage] = useState(1);
+  const pageSize = 6;
   const [selectedMemberId, setSelectedMemberId] = useState('');
   const [selectedRole, setSelectedRole] = useState<Role>('CommitteeMember');
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>(['Users.Manage']);
@@ -1274,6 +1275,12 @@ function MembersPage() {
     const normalized = search.trim().toLowerCase();
     return members.filter((member) => [member.fullName, member.email, member.role, member.permissions.join(' ')].join(' ').toLowerCase().includes(normalized));
   }, [members, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+  const memberPageRows = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filtered.slice(start, start + pageSize);
+  }, [filtered, page, pageSize]);
 
   const filteredJoinRequests = useMemo(() => {
     const normalized = search.trim().toLowerCase();
@@ -1539,17 +1546,60 @@ function MembersPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.3fr_0.7fr]">
         <Card title="قائمة الأعضاء" subtitle="Members">
-          <PagedTable
-            rows={filtered}
-            columns={columns}
-            rowKey={(row) => row.memberId}
-            page={page}
-            pageSize={6}
-            onPageChange={setPage}
-            search={search}
-            emptyTitle="لا يوجد أعضاء"
-            emptyDescription="لن تظهر العناصر هنا إلا عند توفر بيانات الأعضاء من الـ API."
-          />
+          <div className="space-y-3 sm:hidden">
+            {memberPageRows.length === 0 ? (
+              <EmptyState title="لا يوجد أعضاء" description="لن تظهر العناصر هنا إلا عند توفر بيانات الأعضاء من الـ API." />
+            ) : (
+              memberPageRows.map((member) => (
+                <div
+                  key={member.memberId}
+                  className={`rounded-2xl border p-4 ${member.memberId === selectedMemberId ? 'border-brand-400/40 bg-white/10' : 'border-white/10 bg-white/5'}`}
+                >
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div>
+                      <p className="font-bold text-white">{member.fullName}</p>
+                      <p className="mt-1 break-all text-xs text-slate-400">{member.email}</p>
+                    </div>
+                    <Badge tone="brand">{roleLabel(member.role)}</Badge>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    <Badge tone="success">{member.points} نقطة</Badge>
+                    <Badge tone="neutral">{member.permissions.length} صلاحية</Badge>
+                  </div>
+                  <p className="mt-3 text-xs text-slate-400">
+                    {member.governorName ? `المحافظة: ${member.governorName}` : 'بدون محافظة'}
+                    {' '}
+                    ·
+                    {' '}
+                    {member.committeeName ? `اللجنة: ${member.committeeName}` : 'بدون لجنة'}
+                  </p>
+                  <Button className="mt-3 w-full" variant="secondary" onClick={() => setSelectedMemberId(member.memberId)}>
+                    اختيار العضو
+                  </Button>
+                </div>
+              ))
+            )}
+            <div className="flex flex-col gap-2 pt-2">
+              <p className="text-xs text-slate-400">الصفحة {page} من {totalPages} - {filtered.length} عضو</p>
+              <div className="flex gap-2">
+                <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>السابق</Button>
+                <Button variant="secondary" disabled={page >= totalPages} onClick={() => setPage((current) => current + 1)}>التالي</Button>
+              </div>
+            </div>
+          </div>
+          <div className="hidden sm:block">
+            <PagedTable
+              rows={filtered}
+              columns={columns}
+              rowKey={(row) => row.memberId}
+              page={page}
+              pageSize={pageSize}
+              onPageChange={setPage}
+              search={search}
+              emptyTitle="لا يوجد أعضاء"
+              emptyDescription="لن تظهر العناصر هنا إلا عند توفر بيانات الأعضاء من الـ API."
+            />
+          </div>
         </Card>
 
         <Card title="إدارة العضو" subtitle="Selected member">
@@ -2690,7 +2740,39 @@ function AuditLogsPage() {
 
       <div className="grid gap-6 xl:grid-cols-[1.1fr_0.9fr]">
         <Card title="السجلات" subtitle="Log table">
-          <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/60">
+          <div className="space-y-3 sm:hidden">
+            {loading ? (
+              <EmptyState title="جاري التحميل" description="يتم الآن جلب السجلات." />
+            ) : data.items.length === 0 ? (
+              <EmptyState title="لا توجد سجلات" description="لا توجد سجلات مطابقة لنتائج البحث الحالية." />
+            ) : (
+              data.items.map((log) => (
+                <div key={log.id} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <Badge tone={log.actionType === 'Delete' ? 'danger' : log.actionType === 'Update' ? 'warning' : 'brand'}>{log.actionType}</Badge>
+                    <span className="text-xs text-slate-400">{formatDate(log.timestampUtc)}</span>
+                  </div>
+                  <div className="mt-3 space-y-1 text-sm text-slate-300">
+                    <p className="text-slate-100">{log.userName}</p>
+                    <p>الكيان: {log.entityName}</p>
+                    <p className="break-all">المرجع: {log.entityId ?? '—'}</p>
+                    <p className="break-all">IP: {log.ipAddress ?? '—'}</p>
+                  </div>
+                  <Button variant="ghost" className="mt-3 w-full" onClick={() => setSelectedLogId(log.id)}>
+                    عرض التفاصيل
+                  </Button>
+                </div>
+              ))
+            )}
+            <div className="flex flex-col gap-2 pt-2">
+              <p className="text-xs text-slate-400">الصفحة {data.page} من {totalPages} - {data.totalCount} سجل</p>
+              <div className="flex gap-2">
+                <Button variant="secondary" disabled={data.page <= 1} onClick={() => setFilters((current) => ({ ...current, page: Math.max(1, (current.page ?? 1) - 1) }))}>السابق</Button>
+                <Button variant="secondary" disabled={data.page >= totalPages} onClick={() => setFilters((current) => ({ ...current, page: (current.page ?? 1) + 1 }))}>التالي</Button>
+              </div>
+            </div>
+          </div>
+          <div className="hidden overflow-hidden rounded-3xl border border-white/10 bg-slate-950/60 sm:block">
             <div className="overflow-x-auto">
               <table className="min-w-full text-right text-sm">
                 <thead className="bg-white/5 text-slate-300">
@@ -2763,7 +2845,9 @@ function ProfilePage() {
     <div className="space-y-6">
       <SectionTitle eyebrow={pageTitles.profile.eyebrow} title={pageTitles.profile.title} description={pageTitles.profile.description} />
 
-      <PasswordChangeView />
+      <div className="mx-auto w-full max-w-3xl">
+        <PasswordChangeView />
+      </div>
 
       <div className="grid gap-6 xl:grid-cols-[0.8fr_1.2fr]">
         <Card title="بيانات الحساب" subtitle="Profile">
@@ -2771,7 +2855,7 @@ function ProfilePage() {
             <div className="rounded-3xl border border-white/10 bg-white/5 p-5">
               <p className="text-xs text-slate-400">الاسم</p>
               <p className="mt-1 text-xl font-bold text-white">{user?.fullName}</p>
-              <p className="mt-1 text-sm text-slate-400">{user?.email}</p>
+              <p className="mt-1 break-all text-sm text-slate-400">{user?.email}</p>
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <StatCard label="الدور" value={user?.role ?? '—'} accent="brand" />
