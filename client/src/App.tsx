@@ -743,8 +743,8 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     setJoinSuccess('');
     const normalizedNationalId = joinForm.nationalId.replace(/\s+/g, '');
 
-    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.motivation.trim() || !normalizedNationalId) {
-      setJoinError('املأ الاسم والبريد والهاتف والرقم القومي والمحافظة وسبب الانضمام قبل الإرسال.');
+    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.committeeId || !joinForm.motivation.trim() || !normalizedNationalId) {
+      setJoinError('املأ الاسم والبريد والهاتف والرقم القومي والمحافظة واللجنة وسبب الانضمام قبل الإرسال.');
       return;
     }
 
@@ -806,8 +806,9 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
                   value={joinForm.committeeId}
                   onChange={(event) => setJoinForm((current) => ({ ...current, committeeId: event.target.value }))}
                   disabled={joinLoading || !joinForm.governorateId}
+                  required
                 >
-                  <option value="">بدون تحديد</option>
+                  <option value="">اختر لجنة</option>
                   {joinCommittees.map((committee) => <option key={committee.committeeId} value={committee.committeeId}>{committee.name}</option>)}
                 </Select>
               </Field>
