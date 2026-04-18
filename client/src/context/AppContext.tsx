@@ -83,6 +83,7 @@ interface AppContextValue {
   importantContacts: ImportantContactItem[];
   myComplaints: ComplaintItem[];
   activityLogs: ActivityLogEntry[];
+  unreadActivityCount: number;
   notice: { title: string; description: string; tone: ActivityLogEntry['tone'] } | null;
   section: SectionKey;
   theme: ThemeMode;
@@ -125,6 +126,7 @@ interface AppContextValue {
   clearError: () => void;
   clearNotice: () => void;
   addActivity: (title: string, description: string, tone?: ActivityLogEntry['tone']) => void;
+  markActivitiesRead: () => void;
 }
 
 const AppContext = createContext<AppContextValue | undefined>(undefined);
@@ -228,6 +230,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [importantContacts, setImportantContacts] = useState<ImportantContactItem[]>([]);
   const [myComplaints, setMyComplaints] = useState<ComplaintItem[]>([]);
   const [activityLogs, setActivityLogs] = useState<ActivityLogEntry[]>([]);
+  const [unreadActivityCount, setUnreadActivityCount] = useState(0);
   const [notice, setNotice] = useState<{ title: string; description: string; tone: ActivityLogEntry['tone'] } | null>(null);
   const [section, setSection] = useState<SectionKey>('overview');
   const theme: ThemeMode = 'dark';
@@ -281,8 +284,14 @@ export function AppProvider({ children }: PropsWithChildren) {
   const navigation = useMemo(() => navigationSeed.filter((item) => sectionAllowed(user, item)), [user]);
 
   const appendActivity = useCallback((title: string, description: string, tone: ActivityLogEntry['tone'] = 'info') => {
-    setActivityLogs((current) => [createLog(title, description, tone), ...current].slice(0, 30));
+    const entry = createLog(title, description, tone);
+    setActivityLogs((current) => [entry, ...current].slice(0, 30));
     setNotice({ title, description, tone });
+    setUnreadActivityCount((current) => Math.min(current + 1, 30));
+  }, []);
+
+  const markActivitiesRead = useCallback(() => {
+    setUnreadActivityCount(0);
   }, []);
 
   const clearNotice = useCallback(() => {
@@ -460,6 +469,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       setImportantContacts([]);
       setMyComplaints([]);
       setSection('overview');
+      setUnreadActivityCount(0);
     }
   }, [loadSession, token]);
 
@@ -558,6 +568,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     setSection('overview');
     setSearch('');
     setError('');
+    setUnreadActivityCount(0);
     appendActivity('تسجيل الخروج', 'تمت مغادرة الجلسة الحالية', 'warning');
   }, [appendActivity]);
 
@@ -866,6 +877,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     importantContacts,
     myComplaints,
     activityLogs,
+    unreadActivityCount,
     notice,
     section,
     theme,
@@ -907,7 +919,8 @@ export function AppProvider({ children }: PropsWithChildren) {
     reviewJoinRequestItem,
     clearError,
     clearNotice,
-    addActivity: appendActivity
+    addActivity: appendActivity,
+    markActivitiesRead
   }), [
     activityLogs,
     appendActivity,
@@ -931,6 +944,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     deleteMemberItem,
     createTaskItem,
     createImportantContactItem,
+    unreadActivityCount,
     notice,
     dashboard,
     leaderboard,
@@ -960,6 +974,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     changePassword,
     deleteNewsItem,
     deleteImportantContactItem,
+    markActivitiesRead,
   ]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;

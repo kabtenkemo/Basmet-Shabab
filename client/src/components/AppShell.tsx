@@ -1,5 +1,5 @@
-import { FiActivity, FiAward, FiBarChart2, FiCheckSquare, FiClipboard, FiLayers, FiLogOut, FiMenu, FiPhoneCall, FiSearch, FiShield, FiUsers, FiMessageSquare, FiUser, FiFileText, FiEdit } from 'react-icons/fi';
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
+import { FiActivity, FiAward, FiBarChart2, FiBell, FiCheckSquare, FiClipboard, FiLayers, FiLogOut, FiMenu, FiPhoneCall, FiSearch, FiShield, FiUsers, FiMessageSquare, FiUser, FiFileText, FiEdit } from 'react-icons/fi';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useApp } from '../context/AppContext';
 import type { SectionKey } from '../types';
 
@@ -20,14 +20,20 @@ const icons: Record<string, ReactNode> = {
 };
 
 export function AppShell({ children }: { children: ReactNode }) {
-  const { user, navigation, section, setSection, logout, search, setSearch, error, clearError, notice, clearNotice } = useApp();
+  const { user, navigation, section, setSection, logout, search, setSearch, error, clearError, notice, clearNotice, activityLogs, unreadActivityCount, markActivitiesRead } = useApp();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
   const [searchDraft, setSearchDraft] = useState(search);
+  const notificationRef = useRef<HTMLDivElement | null>(null);
   const isLight = false;
 
   const currentTitle = useMemo(() => {
     return navigation.find((item) => item.key === section)?.label ?? 'لوحة التحكم';
   }, [navigation, section]);
+
+  const activityFormatter = useMemo(() => new Intl.DateTimeFormat('ar-EG', { dateStyle: 'medium', timeStyle: 'short' }), []);
+  const latestActivity = useMemo(() => activityLogs.slice(0, 5), [activityLogs]);
+  const unreadLabel = unreadActivityCount > 9 ? '9+' : String(unreadActivityCount);
 
   useEffect(() => {
     setSearchDraft(search);
@@ -59,6 +65,33 @@ export function AppShell({ children }: { children: ReactNode }) {
     };
   }, [mobileOpen]);
 
+  useEffect(() => {
+    if (!notificationsOpen) {
+      return undefined;
+    }
+
+    const handleClick = (event: MouseEvent) => {
+      if (!notificationRef.current || notificationRef.current.contains(event.target as Node)) {
+        return;
+      }
+      setNotificationsOpen(false);
+    };
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        setNotificationsOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClick);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [notificationsOpen]);
+
   const navigate = (value: SectionKey) => {
     if (value !== section) {
       setSearch('');
@@ -66,6 +99,15 @@ export function AppShell({ children }: { children: ReactNode }) {
 
     setSection(value);
     setMobileOpen(false);
+  };
+
+  const toggleNotifications = () => {
+    setNotificationsOpen((current) => {
+      if (!current && unreadActivityCount > 0) {
+        markActivitiesRead();
+      }
+      return !current;
+    });
   };
 
   return (
@@ -135,11 +177,66 @@ export function AppShell({ children }: { children: ReactNode }) {
               <h2 className={`truncate text-lg font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.fullName ?? 'لوحة التحكم'}</h2>
             </div>
 
-            <button type="button" className={`order-3 rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'} sm:order-4`} onClick={logout} aria-label="logout">
+            <div ref={notificationRef} className="order-3 relative sm:order-4">
+              <button
+                type="button"
+                onClick={toggleNotifications}
+                aria-label="الإشعارات"
+                aria-expanded={notificationsOpen}
+                aria-controls="activity-notifications"
+                className={`relative rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'}`}
+              >
+                <FiBell />
+                {unreadActivityCount > 0 && (
+                  <span className="absolute -right-1 -top-1 flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-rose-500 px-1 text-[10px] font-bold text-white">
+                    {unreadLabel}
+                  </span>
+                )}
+              </button>
+
+              {notificationsOpen && (
+                <div
+                  id="activity-notifications"
+                  className={`absolute right-0 mt-3 w-[min(20rem,85vw)] overflow-hidden rounded-3xl border shadow-2xl ${isLight ? 'border-slate-200 bg-white text-slate-900' : 'border-white/10 bg-slate-950 text-slate-100'}`}
+                >
+                  <div className={`flex items-center justify-between border-b px-4 py-3 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
+                    <div>
+                      <p className="text-sm font-bold">الإشعارات</p>
+                      <p className={`text-xs ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>آخر الأنشطة المسجلة</p>
+                    </div>
+                    {activityLogs.length > 0 && (
+                      <span className={`rounded-full px-2 py-1 text-xs font-bold ${isLight ? 'bg-slate-100 text-slate-700' : 'bg-white/10 text-slate-200'}`}>
+                        {activityLogs.length}
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto scrollbar-thin">
+                    {latestActivity.length === 0 ? (
+                      <div className={`px-4 py-6 text-center text-sm ${isLight ? 'text-slate-500' : 'text-slate-400'}`}>
+                        لا توجد إشعارات بعد.
+                      </div>
+                    ) : (
+                      latestActivity.map((item) => (
+                        <div key={item.id} className={`border-b px-4 py-3 last:border-b-0 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
+                          <p className="text-sm font-bold">{item.title}</p>
+                          <p className={`mt-1 text-xs leading-6 ${isLight ? 'text-slate-600' : 'text-slate-400'}`}>{item.description}</p>
+                          <span className={`mt-2 inline-block text-[11px] ${isLight ? 'text-slate-500' : 'text-slate-500'}`}>
+                            {activityFormatter.format(new Date(item.createdAtUtc))}
+                          </span>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            <button type="button" className={`order-4 rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'} sm:order-5`} onClick={logout} aria-label="logout">
               <FiLogOut />
             </button>
 
-            <div className="order-4 flex w-full items-center gap-3 sm:order-3 sm:w-auto sm:flex-1 sm:max-w-xl">
+            <div className="order-5 flex w-full items-center gap-3 sm:order-3 sm:w-auto sm:flex-1 sm:max-w-xl">
               <div className={`flex flex-1 items-center gap-3 rounded-2xl border px-4 py-3 ${isLight ? 'border-slate-200 bg-slate-50' : 'border-white/10 bg-white/5'}`}>
                 <FiSearch className={isLight ? 'text-slate-500' : 'text-slate-400'} />
                 <input
