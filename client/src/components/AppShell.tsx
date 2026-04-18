@@ -197,7 +197,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               {notificationsOpen && (
                 <div
                   id="activity-notifications"
-                  className={`absolute left-1/2 z-40 mt-3 w-[min(20rem,85vw)] -translate-x-1/2 overflow-hidden rounded-3xl border shadow-2xl sm:left-auto sm:right-0 sm:translate-x-0 ${isLight ? 'border-slate-200 bg-white text-slate-900' : 'border-white/10 bg-slate-950 text-slate-100'}`}
+                  className={`absolute right-0 z-40 mt-3 w-[min(20rem,calc(100vw-2rem))] overflow-hidden rounded-3xl border shadow-2xl ${isLight ? 'border-slate-200 bg-white text-slate-900' : 'border-white/10 bg-slate-950 text-slate-100'}`}
                 >
                   <div className={`flex items-center justify-between border-b px-4 py-3 ${isLight ? 'border-slate-200' : 'border-white/10'}`}>
                     <div>
