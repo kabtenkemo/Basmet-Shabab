@@ -172,12 +172,7 @@ export function AppShell({ children }: { children: ReactNode }) {
               <FiMenu />
             </button>
 
-            <div className="order-2 flex min-w-0 flex-1 flex-col">
-              <p className={`text-xs uppercase tracking-[0.35em] ${isLight ? 'text-brand-600/75' : 'text-brand-300/75'}`}>{currentTitle}</p>
-              <h2 className={`truncate text-lg font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.fullName ?? 'لوحة التحكم'}</h2>
-            </div>
-
-            <div ref={notificationRef} className="order-3 relative sm:order-4">
+            <div ref={notificationRef} className="order-2 relative">
               <button
                 type="button"
                 onClick={toggleNotifications}
@@ -230,6 +225,11 @@ export function AppShell({ children }: { children: ReactNode }) {
                   </div>
                 </div>
               )}
+            </div>
+
+            <div className="order-3 flex min-w-0 flex-1 flex-col">
+              <p className={`text-xs uppercase tracking-[0.35em] ${isLight ? 'text-brand-600/75' : 'text-brand-300/75'}`}>{currentTitle}</p>
+              <h2 className={`truncate text-lg font-bold ${isLight ? 'text-slate-900' : 'text-white'}`}>{user?.fullName ?? 'لوحة التحكم'}</h2>
             </div>
 
             <button type="button" className={`order-4 rounded-2xl border p-3 transition ${isLight ? 'border-slate-200 text-slate-700 hover:bg-slate-100' : 'border-white/10 text-slate-200 hover:bg-white/5'} sm:order-5`} onClick={logout} aria-label="logout">
