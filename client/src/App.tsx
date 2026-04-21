@@ -2408,7 +2408,7 @@ function CommitteesPage() {
 
     const loadCommittees = async () => {
       try {
-        const result = await getGovernorateCommittees(selectedGovernorateId);
+        const result = await getGovernorateCommittees(selectedGovernorateId, 'all');
         if (!cancelled) {
           const scopedCommittees = isCommitteeCoordinator && user?.committeeName
             ? result.filter((committee) => isSameScopeName(committee.name, user.committeeName))
@@ -2439,7 +2439,7 @@ function CommitteesPage() {
     try {
       await createCommittee(selectedGovernorateId, form);
       setForm(emptyCommittee);
-      setCommittees(await getGovernorateCommittees(selectedGovernorateId));
+      setCommittees(await getGovernorateCommittees(selectedGovernorateId, 'all'));
       if (addActivity) {
         addActivity('إضافة لجنة', `تمت إضافة لجنة ${form.name}`, 'success');
       }

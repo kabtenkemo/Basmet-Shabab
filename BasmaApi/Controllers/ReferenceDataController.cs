@@ -296,7 +296,15 @@ WHERE
         }
 
         var committeeName = request.Name.Trim();
-        var exists = await _dbContext.Committees.AnyAsync(committee => committee.GovernorateId == governorate.Id && committee.Name == committeeName, cancellationToken);
+        if (string.IsNullOrWhiteSpace(committeeName))
+        {
+            return BadRequest(new { message = "اسم اللجنة مطلوب." });
+        }
+
+        var normalizedCommitteeName = committeeName.ToLower();
+        var exists = await _dbContext.Committees.AnyAsync(
+            committee => committee.GovernorateId == governorate.Id && committee.Name.ToLower() == normalizedCommitteeName,
+            cancellationToken);
         if (exists)
         {
             return Conflict(new { message = "هذه اللجنة موجودة بالفعل داخل المحافظة المحددة." });
@@ -310,7 +318,30 @@ WHERE
         };
 
         _dbContext.Committees.Add(committee);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex, "Committee creation failed due to schema mismatch. Attempting schema repair.");
+            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+
+            var duplicateAfterRepair = await _dbContext.Committees.AnyAsync(
+                item => item.GovernorateId == governorate.Id && item.Name.ToLower() == normalizedCommitteeName,
+                cancellationToken);
+            if (duplicateAfterRepair)
+            {
+                return Conflict(new { message = "هذه اللجنة موجودة بالفعل داخل المحافظة المحددة." });
+            }
+
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException dbEx) when (DatabaseSchemaEnsurer.IsUniqueConstraintViolation(dbEx))
+        {
+            _logger.LogWarning(dbEx, "Duplicate committee create attempt for governorate {GovernorateId} and name {CommitteeName}.", governorate.Id, committeeName);
+            return Conflict(new { message = "هذه اللجنة موجودة بالفعل داخل المحافظة المحددة." });
+        }
 
         return CreatedAtAction(nameof(GetCommittees), new { governorateId }, new CommitteeResponse(
             committee.Id,

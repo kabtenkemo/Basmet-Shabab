@@ -8,6 +8,7 @@ namespace BasmaApi.Data;
 public static class DatabaseSchemaEnsurer
 {
     private static readonly int[] SchemaErrorNumbers = { 207, 208 };
+    private static readonly int[] UniqueConstraintErrorNumbers = { 2601, 2627 };
 
     public static bool IsSchemaMismatch(Exception exception)
     {
@@ -21,6 +22,27 @@ public static class DatabaseSchemaEnsurer
             foreach (SqlError error in sqlException.Errors)
             {
                 if (SchemaErrorNumbers.Contains(error.Number))
+                {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    public static bool IsUniqueConstraintViolation(Exception exception)
+    {
+        for (var current = exception; current is not null; current = current.InnerException)
+        {
+            if (current is not SqlException sqlException)
+            {
+                continue;
+            }
+
+            foreach (SqlError error in sqlException.Errors)
+            {
+                if (UniqueConstraintErrorNumbers.Contains(error.Number))
                 {
                     return true;
                 }
