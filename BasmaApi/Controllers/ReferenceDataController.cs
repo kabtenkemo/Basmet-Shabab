@@ -104,11 +104,6 @@ WHERE c.GovernorateId = @GovernorateId";
                 sql += @" AND c.IsStudentClub = 0";
             }
 
-            if (User.Identity?.IsAuthenticated != true)
-            {
-                sql += @" AND c.IsVisibleInJoinForm = 1";
-            }
-
             sql += @" ORDER BY c.Name";
 
             var connection = _dbContext.Database.GetDbConnection();

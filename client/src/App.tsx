@@ -109,6 +109,7 @@ const emptySuggestion: SuggestionFormState = {
 };
 
 const emptyJoinRequest: TeamJoinRequestCreateState = {
+  applicationType: 'GovernorateMembers',
   fullName: '',
   email: '',
   phoneNumber: '',
@@ -707,7 +708,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
 function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
   const { submitJoinRequest } = useApp();
   const [joinForm, setJoinForm] = useState<TeamJoinRequestCreateState>(emptyJoinRequest);
-  const [joinGovernorateOnly, setJoinGovernorateOnly] = useState(false);
+  const [joinApplicationType, setJoinApplicationType] = useState<'GovernorateMembers' | 'StudentClub'>(emptyJoinRequest.applicationType);
   const [joinGovernorates, setJoinGovernorates] = useState<GovernorateOption[]>([]);
   const [joinCommittees, setJoinCommittees] = useState<CommitteeOption[]>([]);
   const [joinLoading, setJoinLoading] = useState(false);
@@ -751,13 +752,13 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     let cancelled = false;
 
     const loadCommittees = async () => {
-      if (!joinForm.governorateId || joinGovernorateOnly) {
+      if (!joinForm.governorateId) {
         setJoinCommittees([]);
         return;
       }
 
       try {
-        const data = await getGovernorateCommittees(joinForm.governorateId, 'default');
+        const data = await getGovernorateCommittees(joinForm.governorateId, joinApplicationType === 'StudentClub' ? 'club' : 'default');
         if (!cancelled) {
           setJoinCommittees(data);
         }
@@ -773,7 +774,7 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [joinForm.governorateId, joinGovernorateOnly]);
+  }, [joinForm.governorateId, joinApplicationType]);
 
   const submitJoin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -786,8 +787,8 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
       return;
     }
 
-    if (!joinGovernorateOnly && !joinForm.committeeId) {
-      setJoinError('اختر لجنة عند التقديم على مستوى اللجنة.');
+    if (!joinForm.committeeId) {
+      setJoinError('اختر لجنة قبل الإرسال.');
       return;
     }
 
@@ -798,10 +799,10 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
 
     setJoinLoading(true);
     try {
-      const created = await submitJoinRequest(joinGovernorateOnly ? { ...joinForm, committeeId: '' } : joinForm);
+      const created = await submitJoinRequest(joinForm);
       setJoinSuccess(`تم إرسال طلبك إلى منسق محافظة ${created.governorateName}${created.assignedToMemberName ? ` (${created.assignedToMemberName})` : ''}.`);
       setJoinForm(emptyJoinRequest);
-      setJoinGovernorateOnly(false);
+      setJoinApplicationType(emptyJoinRequest.applicationType);
       setJoinCommittees([]);
     } catch (joinSubmitError) {
       setJoinError(joinSubmitError instanceof Error ? joinSubmitError.message : 'تعذر إرسال الطلب حاليًا.');
@@ -847,28 +848,26 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
               </Field>
               <Field label="نوع التقديم">
                 <Select
-                  value={joinGovernorateOnly ? 'governorate' : 'committee'}
+                  value={joinApplicationType}
                   onChange={(event) => {
-                    const isGovernorateOnly = event.target.value === 'governorate';
-                    setJoinGovernorateOnly(isGovernorateOnly);
-                    if (isGovernorateOnly) {
-                      setJoinForm((current) => ({ ...current, committeeId: '' }));
-                    }
+                    const applicationType = event.target.value as 'GovernorateMembers' | 'StudentClub';
+                    setJoinApplicationType(applicationType);
+                    setJoinForm((current) => ({ ...current, applicationType, committeeId: '' }));
                   }}
                   disabled={joinLoading || !joinForm.governorateId}
                 >
-                  <option value="committee">تقديم على لجنة</option>
-                  <option value="governorate">تقديم محافظة فقط</option>
+                  <option value="StudentClub">نادي طلابي</option>
+                  <option value="GovernorateMembers">أعضاء محافظة</option>
                 </Select>
               </Field>
-              <Field label="اللجنة">
+              <Field label={joinApplicationType === 'StudentClub' ? 'النادي الطلابي' : 'لجنة المحافظة'}>
                 <Select
                   value={joinForm.committeeId}
                   onChange={(event) => setJoinForm((current) => ({ ...current, committeeId: event.target.value }))}
-                  disabled={joinLoading || !joinForm.governorateId || joinGovernorateOnly}
-                  required={!joinGovernorateOnly}
+                  disabled={joinLoading || !joinForm.governorateId}
+                  required
                 >
-                  <option value="">{joinGovernorateOnly ? 'غير مطلوب عند تقديم المحافظة فقط' : 'اختر لجنة'}</option>
+                  <option value="">{joinApplicationType === 'StudentClub' ? 'اختر ناديًا طلابيًا' : 'اختر لجنة محافظة'}</option>
                   {joinCommittees.map((committee) => <option key={committee.committeeId} value={committee.committeeId}>{committee.name}</option>)}
                 </Select>
               </Field>

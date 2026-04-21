@@ -334,6 +334,7 @@ export type TeamJoinRequest = {
 };
 
 export type TeamJoinRequestCreateState = {
+  applicationType: 'GovernorateMembers' | 'StudentClub';
   fullName: string;
   email: string;
   phoneNumber: string;

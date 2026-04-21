@@ -104,27 +104,43 @@ public sealed class JoinRequestsController : ControllerBase
             return BadRequest(new { message = "التقديم على هذه المحافظة متوقف حاليًا. اختر محافظة أخرى." });
         }
 
-        Committee? committee = null;
-        if (request.CommitteeId is not null)
+        var applicationType = request.ApplicationType?.Trim().ToLowerInvariant();
+        var isStudentClubApplication = applicationType is "club" or "studentclub" or "student-club";
+        var isGovernorateMembersApplication = string.IsNullOrWhiteSpace(applicationType)
+            || applicationType is "governoratemembers" or "governorate-members" or "members" or "governorate";
+
+        if (!isStudentClubApplication && !isGovernorateMembersApplication)
         {
-            committee = await _dbContext.Committees
-                .AsNoTracking()
-                .FirstOrDefaultAsync(item => item.Id == request.CommitteeId.Value && item.GovernorateId == request.GovernorateId, cancellationToken);
+            return BadRequest(new { message = "نوع التقديم غير صالح. اختر نادي طلابي أو أعضاء محافظة." });
+        }
 
-            if (committee is null)
-            {
-                return BadRequest(new { message = "اللجنة المختارة لا تتبع المحافظة المحددة." });
-            }
+        if (request.CommitteeId is null)
+        {
+            return BadRequest(new { message = "اختر لجنة مناسبة لنوع التقديم." });
+        }
 
-            if (!committee.IsVisibleInJoinForm)
-            {
-                return BadRequest(new { message = "التقديم على هذه اللجنة متوقف حاليًا. اختر لجنة أخرى." });
-            }
+        var committee = await _dbContext.Committees
+            .AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == request.CommitteeId.Value && item.GovernorateId == request.GovernorateId, cancellationToken);
 
-            if (committee.IsStudentClub)
-            {
-                return BadRequest(new { message = "التقديم على النوادي الطلابية غير متاح من فورم المحافظات." });
-            }
+        if (committee is null)
+        {
+            return BadRequest(new { message = "اللجنة المختارة لا تتبع المحافظة المحددة." });
+        }
+
+        if (!committee.IsVisibleInJoinForm)
+        {
+            return BadRequest(new { message = "التقديم على هذه اللجنة متوقف حاليًا. اختر لجنة أخرى." });
+        }
+
+        if (isStudentClubApplication && !committee.IsStudentClub)
+        {
+            return BadRequest(new { message = "اختر ناديًا طلابيًا عند تقديم نادي طلابي." });
+        }
+
+        if (isGovernorateMembersApplication && committee.IsStudentClub)
+        {
+            return BadRequest(new { message = "اختر لجنة محافظة عند التقديم كأعضاء محافظة." });
         }
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();

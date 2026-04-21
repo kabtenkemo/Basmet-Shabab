@@ -353,6 +353,7 @@ export async function createJoinRequest(form: TeamJoinRequestCreateState) {
     method: 'POST',
     url: '/api/join-requests',
     data: {
+      applicationType: form.applicationType,
       fullName: form.fullName.trim(),
       email: form.email.trim().toLowerCase(),
       phoneNumber: form.phoneNumber.trim(),

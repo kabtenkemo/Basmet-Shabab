@@ -21,6 +21,8 @@ public sealed class TeamJoinRequestCreateRequest
     [Required]
     public Guid GovernorateId { get; init; }
 
+    public string ApplicationType { get; init; } = "GovernorateMembers";
+
     public Guid? CommitteeId { get; init; }
 
     [Required]
