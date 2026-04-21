@@ -477,7 +477,8 @@ IF OBJECT_ID('dbo.Governorates', 'U') IS NULL
 BEGIN
     CREATE TABLE dbo.Governorates (
         Id uniqueidentifier NOT NULL CONSTRAINT PK_Governorates PRIMARY KEY,
-        Name nvarchar(120) NOT NULL
+        Name nvarchar(120) NOT NULL,
+        IsVisibleInJoinForm bit NOT NULL CONSTRAINT DF_Governorates_IsVisibleInJoinForm DEFAULT 1
     );
 END;
 
@@ -487,9 +488,20 @@ BEGIN
         Id uniqueidentifier NOT NULL CONSTRAINT PK_Committees PRIMARY KEY,
         GovernorateId uniqueidentifier NOT NULL,
         Name nvarchar(120) NOT NULL,
+        IsVisibleInJoinForm bit NOT NULL CONSTRAINT DF_Committees_IsVisibleInJoinForm DEFAULT 1,
         CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_Committees_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT FK_Committees_Governorates_GovernorateId FOREIGN KEY (GovernorateId) REFERENCES dbo.Governorates (Id) ON DELETE CASCADE
     );
+END;
+
+IF COL_LENGTH('dbo.Governorates', 'IsVisibleInJoinForm') IS NULL
+BEGIN
+    ALTER TABLE dbo.Governorates ADD IsVisibleInJoinForm bit NOT NULL CONSTRAINT DF_Governorates_IsVisibleInJoinForm DEFAULT 1;
+END;
+
+IF COL_LENGTH('dbo.Committees', 'IsVisibleInJoinForm') IS NULL
+BEGIN
+    ALTER TABLE dbo.Committees ADD IsVisibleInJoinForm bit NOT NULL CONSTRAINT DF_Committees_IsVisibleInJoinForm DEFAULT 1;
 END;
 
 IF COL_LENGTH('dbo.Members', 'GovernorateId') IS NULL ALTER TABLE dbo.Members ADD GovernorateId uniqueidentifier NULL;

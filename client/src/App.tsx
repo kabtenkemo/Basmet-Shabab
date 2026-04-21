@@ -3,7 +3,7 @@ import { FiActivity, FiArrowLeft, FiClock, FiDownload, FiEdit3, FiPlus, FiPrinte
 import { AppShell } from './components/AppShell';
 import { Badge, Button, Card, EmptyState, Field, Input, Modal, PagedTable, Select, SectionTitle, StatCard, Textarea, type TableColumn } from './components/ui';
 import { useApp } from './context/AppContext';
-import { commentComplaint, createCommittee, deleteCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, createSuggestion, voteSuggestion } from './api';
+import { commentComplaint, createCommittee, deleteCommittee, escalateComplaint, getAuditLogs, getComplaint, getGovernorateCommittees, getGovernorates, getSuggestions, createSuggestion, updateCommitteeJoinVisibility, updateGovernorateJoinVisibility, voteSuggestion } from './api';
 import type { AuditLogFilters, AuditLogItem, CommitteeCreateFormState, CommitteeOption, ComplaintCommentState, ComplaintDetail, ComplaintEscalateState, ComplaintFormState, ComplaintItem, ComplaintReviewState, GovernorateOption, ImportantContactCreateState, ImportantContactItem, MemberAdminItem, MemberCreateFormState, NewsCreateState, NewsItem, PointFormState, Role, SectionKey, SuggestionItem, SuggestionFormState, TaskAudienceType, TaskFormState, TaskItem, TeamJoinRequest, TeamJoinRequestCreateState, TeamJoinRequestReviewState } from './types';
 
 /**
@@ -149,7 +149,8 @@ const permissionOptions = [
 
 const permissionOptionsWithJoinRequests = [
   ...permissionOptions,
-  { key: 'JoinRequests.Review', label: 'مراجعة طلبات الالتحاق' }
+  { key: 'JoinRequests.Review', label: 'مراجعة طلبات الالتحاق' },
+  { key: 'JoinRequests.Visibility.Manage', label: 'فتح/إغلاق التقديم على المحافظة' }
 ] as const;
 
 const statusLabels: Record<string, string> = {
@@ -197,6 +198,11 @@ const pageTitles: Record<SectionKey, { eyebrow: string; title: string; descripti
     eyebrow: 'User Management',
     title: 'إدارة الأعضاء والصلاحيات',
     description: 'إنشاء أعضاء جدد، تغيير الأدوار، منح الصلاحيات، وتعديل النقاط من شاشة واحدة.'
+  },
+  studentclubs: {
+    eyebrow: 'Student Clubs',
+    title: 'النوادي الطلابية والأدوار التنظيمية',
+    description: 'عرض مناصب النوادي الطلابية داخل النطاق الحالي (Club) بدون رئيس كيان أو مساعد رئيس أو عضو مركزية.'
   },
   tasks: {
     eyebrow: 'Task Management',
@@ -261,6 +267,22 @@ function formatDateOnly(value: string | null | undefined) {
 
 function roleLabel(role: string) {
   return roleLabels[role as Role] ?? role;
+}
+
+function clubRoleLabel(role: Role) {
+  if (role === 'GovernorCoordinator') {
+    return 'منسق محافظة Club';
+  }
+
+  if (role === 'GovernorCommitteeCoordinator') {
+    return 'منسق لجنة Club';
+  }
+
+  if (role === 'CommitteeMember') {
+    return 'عضو لجنة Club';
+  }
+
+  return roleLabel(role);
 }
 
 function statusLabel(status: string) {
@@ -354,6 +376,7 @@ const sectionPathByKey: Record<SectionKey, string> = {
   news: '/news',
   joinrequests: '/join-requests',
   members: '/members',
+  studentclubs: '/student-clubs',
   tasks: '/tasks',
   complaints: '/complaints',
   auditlogs: '/audit-logs',
@@ -373,6 +396,8 @@ const sectionByPath: Record<string, SectionKey> = {
   '/join-requests': 'joinrequests',
   '/joinrequests': 'joinrequests',
   '/members': 'members',
+  '/student-clubs': 'studentclubs',
+  '/studentclubs': 'studentclubs',
   '/tasks': 'tasks',
   '/complaints': 'complaints',
   '/audit-logs': 'auditlogs',
@@ -1788,7 +1813,7 @@ function MembersPage() {
 }
 
 function TasksPage() {
-  const { tasks, members, search, createTaskItem, updateTaskItem, deleteTaskItem, user } = useApp();
+  const { tasks, members, search, createTaskItem, updateTaskItem, deleteTaskItem, completeTaskItem, user } = useApp();
   const [page, setPage] = useState(1);
   const [taskOpen, setTaskOpen] = useState(false);
   const [editing, setEditing] = useState<TaskItem | null>(null);
@@ -1839,7 +1864,24 @@ function TasksPage() {
     { header: 'التصنيف', render: (row) => <div className="space-y-1"><Badge tone="brand">{taskAudienceLabel(row.audienceType)}</Badge><p className="text-xs text-slate-400">{row.audienceType === 'All' ? 'متاحة للجميع' : row.audienceType === 'Roles' ? `${row.targetRoles.length} منصب` : `${row.targetMemberIds.length} عضو`}</p></div> },
     { header: 'الحالة', render: (row) => <Badge tone={row.isCompleted ? 'success' : 'warning'}>{row.isCompleted ? 'مكتملة' : 'قيد التنفيذ'}</Badge> },
     { header: 'الاستحقاق', render: (row) => formatDate(row.dueDate) },
-    { header: 'الإجراءات', render: (row) => <div className="flex flex-wrap gap-2"><Button variant="ghost" onClick={() => { setEditing(row); setTaskForm({ title: row.title, description: row.description ?? '', dueDate: row.dueDate?.slice(0, 10) ?? '', audienceType: (row.audienceType as TaskAudienceType) ?? 'All', targetRoles: row.targetRoles as Role[], targetMemberIds: row.targetMemberIds, isCompleted: row.isCompleted }); setTaskOpen(true); }}><span className="inline-flex items-center gap-2"><FiEdit3 /> تعديل</span></Button><Button variant="danger" onClick={() => void deleteTaskItem(row.id)}><span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span></Button></div> }
+    {
+      header: 'الإجراءات',
+      render: (row) => (
+        <div className="flex flex-wrap gap-2">
+          {!row.isCompleted && (
+            <Button variant="secondary" onClick={() => void completeTaskItem(row.id)}>
+              <span className="inline-flex items-center gap-2"><FiSave /> إتمام المهمة</span>
+            </Button>
+          )}
+          <Button variant="ghost" onClick={() => { setEditing(row); setTaskForm({ title: row.title, description: row.description ?? '', dueDate: row.dueDate?.slice(0, 10) ?? '', audienceType: (row.audienceType as TaskAudienceType) ?? 'All', targetRoles: row.targetRoles as Role[], targetMemberIds: row.targetMemberIds, isCompleted: row.isCompleted }); setTaskOpen(true); }}>
+            <span className="inline-flex items-center gap-2"><FiEdit3 /> تعديل</span>
+          </Button>
+          <Button variant="danger" onClick={() => void deleteTaskItem(row.id)}>
+            <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
+          </Button>
+        </div>
+      )
+    }
   ];
 
   const syncAudience = (audienceType: TaskAudienceType) => {
@@ -2257,15 +2299,31 @@ function CommitteesPage() {
   const [selectedGovernorateId, setSelectedGovernorateId] = useState('');
   const [committees, setCommittees] = useState<CommitteeOption[]>([]);
   const [form, setForm] = useState<CommitteeCreateFormState>(emptyCommittee);
+  const [updatingGovernorateVisibility, setUpdatingGovernorateVisibility] = useState(false);
+  const [updatingCommitteeVisibilityId, setUpdatingCommitteeVisibilityId] = useState<string | null>(null);
 
   const canManageCommitteeCatalog = user?.role === 'President' || user?.role === 'VicePresident' || user?.role === 'GovernorCoordinator';
+  const canManageJoinVisibility = Boolean(user?.permissions.some((permission) => permission.toLowerCase() === 'joinrequests.visibility.manage'));
+  const isCommitteeCoordinator = user?.role === 'GovernorCommitteeCoordinator';
+  const canManageCommitteeJoinVisibility = canManageJoinVisibility || isCommitteeCoordinator;
+  const canManageGovernorateJoinVisibility = canManageJoinVisibility && !isCommitteeCoordinator;
+  const canAccessGovernorateControls = canManageCommitteeCatalog || canManageCommitteeJoinVisibility;
+  const canManageAnyGovernorate = user?.role === 'President' || user?.role === 'VicePresident';
   const visibleGovernorates = useMemo(() => {
-    if (user?.role === 'GovernorCoordinator' && user.governorName) {
+    if (canManageAnyGovernorate) {
+      return governorates;
+    }
+
+    if (user?.governorName) {
       return governorates.filter((governorate) => governorate.name === user.governorName);
     }
 
-    return governorates;
-  }, [governorates, user?.governorName, user?.role]);
+    return [];
+  }, [canManageAnyGovernorate, governorates, user?.governorName]);
+  const selectedGovernorate = useMemo(
+    () => governorates.find((governorate) => governorate.governorateId === selectedGovernorateId) ?? null,
+    [governorates, selectedGovernorateId]
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -2275,9 +2333,11 @@ function CommitteesPage() {
         const result = await getGovernorates();
         if (!cancelled) {
           setGovernorates(result);
-          const filteredGovernorates = user?.role === 'GovernorCoordinator' && user.governorName
-            ? result.filter((governorate) => governorate.name === user.governorName)
-            : result;
+          const filteredGovernorates = canManageAnyGovernorate
+            ? result
+            : user?.governorName
+              ? result.filter((governorate) => governorate.name === user.governorName)
+              : [];
           setSelectedGovernorateId((current) => current || filteredGovernorates[0]?.governorateId || '');
         }
       } catch {
@@ -2293,7 +2353,7 @@ function CommitteesPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [canManageAnyGovernorate, user?.governorName]);
 
   useEffect(() => {
     if (!selectedGovernorateId) {
@@ -2307,7 +2367,11 @@ function CommitteesPage() {
       try {
         const result = await getGovernorateCommittees(selectedGovernorateId);
         if (!cancelled) {
-          setCommittees(result);
+          const scopedCommittees = isCommitteeCoordinator && user?.committeeName
+            ? result.filter((committee) => isSameScopeName(committee.name, user.committeeName))
+            : result;
+
+          setCommittees(scopedCommittees);
         }
       } catch {
         if (!cancelled) {
@@ -2321,7 +2385,7 @@ function CommitteesPage() {
     return () => {
       cancelled = true;
     };
-  }, [selectedGovernorateId]);
+  }, [isCommitteeCoordinator, selectedGovernorateId, user?.committeeName]);
 
   const addCommittee = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -2361,6 +2425,75 @@ function CommitteesPage() {
     }
   };
 
+  const toggleJoinFormVisibility = async () => {
+    if (!canManageGovernorateJoinVisibility) {
+      return;
+    }
+
+    if (!selectedGovernorate) {
+      return;
+    }
+
+    setUpdatingGovernorateVisibility(true);
+    try {
+      const updatedGovernorate = await updateGovernorateJoinVisibility(
+        selectedGovernorate.governorateId,
+        !selectedGovernorate.isVisibleInJoinForm
+      );
+
+      setGovernorates((current) =>
+        current.map((governorate) =>
+          governorate.governorateId === updatedGovernorate.governorateId ? updatedGovernorate : governorate
+        )
+      );
+
+      if (addActivity) {
+        addActivity(
+          'تحديث إتاحة التقديم',
+          `تم ${updatedGovernorate.isVisibleInJoinForm ? 'إظهار' : 'إخفاء'} محافظة ${updatedGovernorate.name} في فورم التقديم.`,
+          updatedGovernorate.isVisibleInJoinForm ? 'success' : 'warning'
+        );
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر تحديث حالة الظهور حاليًا.');
+    } finally {
+      setUpdatingGovernorateVisibility(false);
+    }
+  };
+
+  const toggleCommitteeFormVisibility = async (committee: CommitteeOption) => {
+    if (!canManageCommitteeJoinVisibility) {
+      return;
+    }
+
+    setUpdatingCommitteeVisibilityId(committee.committeeId);
+    try {
+      const updatedCommittee = await updateCommitteeJoinVisibility(
+        committee.governorateId,
+        committee.committeeId,
+        !committee.isVisibleInJoinForm
+      );
+
+      setCommittees((current) =>
+        current.map((item) =>
+          item.committeeId === updatedCommittee.committeeId ? updatedCommittee : item
+        )
+      );
+
+      if (addActivity) {
+        addActivity(
+          'تحديث إتاحة التقديم على لجنة',
+          `تم ${updatedCommittee.isVisibleInJoinForm ? 'فتح' : 'إغلاق'} التقديم على لجنة ${updatedCommittee.name}.`,
+          updatedCommittee.isVisibleInJoinForm ? 'success' : 'warning'
+        );
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر تحديث حالة التقديم على اللجنة حاليًا.');
+    } finally {
+      setUpdatingCommitteeVisibilityId(null);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <SectionTitle
@@ -2371,7 +2504,7 @@ function CommitteesPage() {
 
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <Card title="إنشاء لجنة" subtitle="Local workspace">
-          {canManageCommitteeCatalog ? (
+          {canAccessGovernorateControls ? (
             <form className="space-y-4" onSubmit={(event) => void addCommittee(event)}>
               <Field label="المحافظة">
                 <Select value={selectedGovernorateId} onChange={(event) => setSelectedGovernorateId(event.target.value)}>
@@ -2379,13 +2512,55 @@ function CommitteesPage() {
                   {visibleGovernorates.map((governorate) => <option key={governorate.governorateId} value={governorate.governorateId}>{governorate.name}</option>)}
                 </Select>
               </Field>
-              <Field label="اسم اللجنة">
-                <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="مثال: لجنة التنظيم" />
-              </Field>
-              <Button type="submit" className="w-full" disabled={!selectedGovernorateId}><span className="inline-flex items-center gap-2"><FiPlus /> إضافة لجنة</span></Button>
+
+              {canManageGovernorateJoinVisibility ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-sm text-slate-300">
+                  <p className="text-xs text-slate-400">ظهور المحافظة في فورم التقديم</p>
+                  <p className="mt-1 font-semibold text-white">
+                    {!selectedGovernorate
+                      ? 'اختر محافظة أولًا'
+                      : selectedGovernorate.isVisibleInJoinForm
+                        ? 'المحافظة ظاهرة ويمكن التقديم عليها'
+                        : 'المحافظة مخفية والتقديم عليها متوقف'}
+                  </p>
+                  <p className="mt-2 text-xs text-slate-400">عند اكتمال العدد المطلوب يمكنك إخفاء المحافظة من فورم التقديم العام ثم إعادة تفعيلها لاحقًا.</p>
+                  <Button
+                    type="button"
+                    variant={selectedGovernorate?.isVisibleInJoinForm ? 'ghost' : 'secondary'}
+                    className="mt-3 w-full"
+                    onClick={() => void toggleJoinFormVisibility()}
+                    disabled={!selectedGovernorate || updatingGovernorateVisibility}
+                  >
+                    {updatingGovernorateVisibility
+                      ? 'جارٍ تحديث الحالة...'
+                      : selectedGovernorate?.isVisibleInJoinForm
+                        ? 'إغلاق التقديم على المحافظة'
+                        : 'فتح التقديم على المحافظة'}
+                  </Button>
+                </div>
+              ) : canManageJoinVisibility ? (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-6 text-slate-400">
+                  لا تملك صلاحية فتح/إغلاق التقديم على المحافظة.
+                </div>
+              ) : null}
+
+              {!canManageCommitteeCatalog && canManageCommitteeJoinVisibility && (
+                <div className="rounded-2xl border border-white/10 bg-white/5 p-4 text-xs leading-6 text-slate-400">
+                  لديك صلاحية التحكم في فتح/إغلاق التقديم على اللجنة داخل نطاقك فقط.
+                </div>
+              )}
+
+              {canManageCommitteeCatalog && (
+                <>
+                  <Field label="اسم اللجنة">
+                    <Input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="مثال: لجنة التنظيم" />
+                  </Field>
+                  <Button type="submit" className="w-full" disabled={!selectedGovernorateId}><span className="inline-flex items-center gap-2"><FiPlus /> إضافة لجنة</span></Button>
+                </>
+              )}
             </form>
           ) : (
-            <EmptyState title="لا توجد صلاحية" description="إنشاء اللجان متاح لرئيس الكيان أو مساعد الرئيس أو منسق المحافظة." />
+            <EmptyState title="لا توجد صلاحية" description="لا توجد صلاحية لإدارة اللجان أو فتح/إغلاق التقديم على المحافظة." />
           )}
         </Card>
 
@@ -2400,13 +2575,32 @@ function CommitteesPage() {
                     <div>
                       <p className="font-bold text-white">{committee.name}</p>
                       <p className="text-sm text-slate-400">{committee.governorateName}</p>
+                      <p className="mt-1 text-xs text-slate-300">{committee.isVisibleInJoinForm ? 'التقديم مفتوح على هذه اللجنة' : 'التقديم مغلق على هذه اللجنة'}</p>
                       <p className="mt-2 text-xs text-slate-400">{formatDate(committee.createdAtUtc)}</p>
                     </div>
-                    {canManageCommitteeCatalog && (
-                      <Button variant="ghost" className="px-3 py-2" onClick={() => void removeCommittee(committee)}>
-                        <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
-                      </Button>
-                    )}
+                    <div className="flex flex-wrap gap-2">
+                      {canManageCommitteeJoinVisibility && (
+                        <Button
+                          variant={committee.isVisibleInJoinForm ? 'ghost' : 'secondary'}
+                          className="px-3 py-2"
+                          onClick={() => void toggleCommitteeFormVisibility(committee)}
+                          disabled={updatingCommitteeVisibilityId === committee.committeeId}
+                        >
+                          <span className="inline-flex items-center gap-2">
+                            {updatingCommitteeVisibilityId === committee.committeeId
+                              ? 'جارٍ التحديث...'
+                              : committee.isVisibleInJoinForm
+                                ? 'إغلاق التقديم'
+                                : 'فتح التقديم'}
+                          </span>
+                        </Button>
+                      )}
+                      {canManageCommitteeCatalog && (
+                        <Button variant="ghost" className="px-3 py-2" onClick={() => void removeCommittee(committee)}>
+                          <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 </div>
               ))}
@@ -2414,6 +2608,438 @@ function CommitteesPage() {
           )}
         </Card>
       </div>
+    </div>
+  );
+}
+
+function StudentClubsPage() {
+  const { members, search, user, createMember, canCreateMembers, addActivity } = useApp();
+  const [createClubOpen, setCreateClubOpen] = useState(false);
+  const [createClubMemberOpen, setCreateClubMemberOpen] = useState(false);
+  const [clubForm, setClubForm] = useState<CommitteeCreateFormState>(emptyCommittee);
+  const [clubFormError, setClubFormError] = useState('');
+  const [clubMemberForm, setClubMemberForm] = useState<MemberCreateFormState>({ ...emptyMember, role: 'CommitteeMember' });
+  const [clubMemberFormError, setClubMemberFormError] = useState('');
+  const [clubGovernorateId, setClubGovernorateId] = useState('');
+  const [governorates, setGovernorates] = useState<GovernorateOption[]>([]);
+  const [committees, setCommittees] = useState<CommitteeOption[]>([]);
+  const [scopeLoading, setScopeLoading] = useState(false);
+
+  const clubRoles: Role[] = ['GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'];
+  const canCreateClub = user?.role === 'President' || user?.role === 'VicePresident' || user?.role === 'GovernorCoordinator';
+  const allowedClubCreateRoles = useMemo<Role[]>(() => {
+    if (!canCreateMembers || !user) {
+      return [];
+    }
+
+    if (user.role === 'GovernorCommitteeCoordinator') {
+      return ['CommitteeMember'];
+    }
+
+    if (user.role === 'GovernorCoordinator') {
+      return ['GovernorCommitteeCoordinator', 'CommitteeMember'];
+    }
+
+    return ['GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'];
+  }, [canCreateMembers, user]);
+
+  const canCreateClubMember = allowedClubCreateRoles.length > 0;
+  const visibleGovernorates = useMemo(() => {
+    if ((user?.role === 'GovernorCoordinator' || user?.role === 'GovernorCommitteeCoordinator') && user.governorName) {
+      return governorates.filter((governorate) => isSameScopeName(governorate.name, user.governorName));
+    }
+
+    return governorates;
+  }, [governorates, user?.governorName, user?.role]);
+
+  const clubMembers = useMemo(() => {
+    const normalized = search.trim().toLowerCase();
+
+    let scopedMembers = members.filter((member) => clubRoles.includes(member.role));
+
+    if (user?.role === 'GovernorCoordinator' && user.governorName) {
+      scopedMembers = scopedMembers.filter((member) => isSameScopeName(member.governorName, user.governorName));
+    }
+
+    if (user?.role === 'GovernorCommitteeCoordinator' && user.governorName && user.committeeName) {
+      scopedMembers = scopedMembers.filter((member) =>
+        isSameScopeName(member.governorName, user.governorName)
+        && isSameScopeName(member.committeeName, user.committeeName));
+    }
+
+    if (!normalized) {
+      return scopedMembers;
+    }
+
+    return scopedMembers.filter((member) => [
+      member.fullName,
+      member.email,
+      member.governorName ?? '',
+      member.committeeName ?? '',
+      clubRoleLabel(member.role)
+    ].join(' ').toLowerCase().includes(normalized));
+  }, [members, search, user?.committeeName, user?.governorName, user?.role]);
+
+  const roleStats = useMemo(() => {
+    return {
+      governorCoordinators: clubMembers.filter((member) => member.role === 'GovernorCoordinator').length,
+      committeeCoordinators: clubMembers.filter((member) => member.role === 'GovernorCommitteeCoordinator').length,
+      committeeMembers: clubMembers.filter((member) => member.role === 'CommitteeMember').length
+    };
+  }, [clubMembers]);
+
+  useEffect(() => {
+    if (!createClubOpen && !createClubMemberOpen) {
+      return;
+    }
+
+    let cancelled = false;
+    const loadGovernorates = async () => {
+      setScopeLoading(true);
+      try {
+        const result = await getGovernorates();
+        if (cancelled) {
+          return;
+        }
+
+        setGovernorates(result);
+
+        const scopedGovernorates = (user?.role === 'GovernorCoordinator' || user?.role === 'GovernorCommitteeCoordinator') && user.governorName
+          ? result.filter((governorate) => isSameScopeName(governorate.name, user.governorName))
+          : result;
+
+        if (createClubOpen) {
+          setClubGovernorateId((current) => current || scopedGovernorates[0]?.governorateId || '');
+        }
+
+        if (createClubMemberOpen) {
+          setClubMemberForm((current) => ({
+            ...current,
+            role: allowedClubCreateRoles.includes(current.role) ? current.role : (allowedClubCreateRoles[0] ?? 'CommitteeMember'),
+            governorateId: current.governorateId || scopedGovernorates[0]?.governorateId || ''
+          }));
+        }
+      } catch {
+        if (!cancelled) {
+          setGovernorates([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setScopeLoading(false);
+        }
+      }
+    };
+
+    void loadGovernorates();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [allowedClubCreateRoles, createClubMemberOpen, createClubOpen, user?.governorName, user?.role]);
+
+  useEffect(() => {
+    if (!createClubMemberOpen || !clubMemberForm.governorateId || !roleNeedsCommittee(clubMemberForm.role)) {
+      setCommittees([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadCommittees = async () => {
+      setScopeLoading(true);
+      try {
+        const result = await getGovernorateCommittees(clubMemberForm.governorateId);
+        if (cancelled) {
+          return;
+        }
+
+        setCommittees(result);
+        if (user?.role === 'GovernorCommitteeCoordinator' && user.committeeName) {
+          const scopedCommittee = result.find((committee) => isSameScopeName(committee.name, user.committeeName));
+          setClubMemberForm((current) => ({
+            ...current,
+            committeeId: current.committeeId || scopedCommittee?.committeeId || ''
+          }));
+        }
+      } catch {
+        if (!cancelled) {
+          setCommittees([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setScopeLoading(false);
+        }
+      }
+    };
+
+    void loadCommittees();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [clubMemberForm.governorateId, clubMemberForm.role, createClubMemberOpen, user?.committeeName, user?.role]);
+
+  useEffect(() => {
+    if (!createClubMemberOpen) {
+      return;
+    }
+
+    if (!roleNeedsCommittee(clubMemberForm.role) && clubMemberForm.committeeId) {
+      setClubMemberForm((current) => ({ ...current, committeeId: '' }));
+    }
+  }, [clubMemberForm.committeeId, clubMemberForm.role, createClubMemberOpen]);
+
+  const openCreateClubModal = () => {
+    setClubForm(emptyCommittee);
+    setClubFormError('');
+    setClubGovernorateId(visibleGovernorates[0]?.governorateId ?? '');
+    setCreateClubOpen(true);
+  };
+
+  const openCreateClubMemberModal = () => {
+    const defaultRole = allowedClubCreateRoles[0] ?? 'CommitteeMember';
+    const defaultGovernorate = visibleGovernorates[0]?.governorateId ?? '';
+
+    setClubMemberForm({
+      ...emptyMember,
+      role: defaultRole,
+      governorateId: defaultGovernorate,
+      committeeId: ''
+    });
+    setClubMemberFormError('');
+    setCreateClubMemberOpen(true);
+  };
+
+  const submitCreateClub = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setClubFormError('');
+
+    if (!clubGovernorateId) {
+      setClubFormError('يرجى اختيار المحافظة أولاً.');
+      return;
+    }
+
+    if (!clubForm.name.trim()) {
+      setClubFormError('اسم النادي الطلابي مطلوب.');
+      return;
+    }
+
+    try {
+      const trimmedName = clubForm.name.trim();
+      await createCommittee(clubGovernorateId, { name: trimmedName });
+      addActivity('إنشاء نادي طلابي', `تم إنشاء نادي ${trimmedName}.`, 'success');
+      setCreateClubOpen(false);
+      setClubForm(emptyCommittee);
+      setClubFormError('');
+    } catch (error) {
+      setClubFormError(error instanceof Error ? error.message : 'تعذر إنشاء النادي الطلابي.');
+    }
+  };
+
+  const submitCreateClubMember = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setClubMemberFormError('');
+
+    if (!allowedClubCreateRoles.includes(clubMemberForm.role)) {
+      setClubMemberFormError('لا تملك صلاحية إنشاء هذا الدور في النوادي الطلابية.');
+      return;
+    }
+
+    const nameParts = clubMemberForm.fullName.trim().split(/\s+/).filter(Boolean);
+    if (!clubMemberForm.fullName.trim() || nameParts.length < 4) {
+      setClubMemberFormError('الاسم الرباعي مطلوب لإنشاء عضو النادي الطلابي.');
+      return;
+    }
+
+    if (!clubMemberForm.email.trim()) {
+      setClubMemberFormError('البريد الإلكتروني مطلوب.');
+      return;
+    }
+
+    const normalizedNationalId = clubMemberForm.nationalId.replace(/\s+/g, '');
+    if (normalizedNationalId.length !== 14 || /[^0-9]/.test(normalizedNationalId)) {
+      setClubMemberFormError('الرقم القومي يجب أن يكون 14 رقمًا.');
+      return;
+    }
+
+    let resolvedBirthDate = clubMemberForm.birthDate;
+    if (!resolvedBirthDate) {
+      const extractedBirthDate = extractBirthDateFromNationalId(normalizedNationalId);
+      if (!extractedBirthDate) {
+        setClubMemberFormError('تعذر استخراج تاريخ الميلاد من الرقم القومي. أدخل التاريخ يدويًا.');
+        return;
+      }
+
+      resolvedBirthDate = extractedBirthDate;
+      setClubMemberForm((current) => ({ ...current, birthDate: extractedBirthDate }));
+    }
+
+    if (roleNeedsGovernorate(clubMemberForm.role) && !clubMemberForm.governorateId) {
+      setClubMemberFormError('المحافظة مطلوبة لهذا الدور.');
+      return;
+    }
+
+    if (roleNeedsCommittee(clubMemberForm.role) && !clubMemberForm.committeeId) {
+      setClubMemberFormError('اللجنة مطلوبة لهذا الدور.');
+      return;
+    }
+
+    try {
+      await createMember({
+        ...clubMemberForm,
+        fullName: clubMemberForm.fullName.trim(),
+        email: clubMemberForm.email.trim().toLowerCase(),
+        nationalId: normalizedNationalId,
+        birthDate: resolvedBirthDate,
+        governorateId: roleNeedsGovernorate(clubMemberForm.role) ? clubMemberForm.governorateId : '',
+        committeeId: roleNeedsCommittee(clubMemberForm.role) ? clubMemberForm.committeeId : ''
+      });
+
+      setCreateClubMemberOpen(false);
+      setClubMemberForm({ ...emptyMember, role: allowedClubCreateRoles[0] ?? 'CommitteeMember' });
+      setClubMemberFormError('');
+    } catch (error) {
+      setClubMemberFormError(error instanceof Error ? error.message : 'تعذر إنشاء عضو النادي الطلابي.');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <SectionTitle
+        eyebrow={pageTitles.studentclubs.eyebrow}
+        title={pageTitles.studentclubs.title}
+        description={pageTitles.studentclubs.description}
+        actions={canCreateClub || canCreateClubMember ? (
+          <div className="flex flex-wrap gap-2">
+            {canCreateClub && (
+              <Button onClick={openCreateClubModal}>
+                <span className="inline-flex items-center gap-2"><FiPlus /> إنشاء نادي طلابي</span>
+              </Button>
+            )}
+            {canCreateClubMember && (
+              <Button variant="secondary" onClick={openCreateClubMemberModal}>
+                <span className="inline-flex items-center gap-2"><FiUserPlus /> إنشاء عضو نادي</span>
+              </Button>
+            )}
+          </div>
+        ) : undefined}
+      />
+
+      <div className="grid gap-4 sm:grid-cols-3">
+        <StatCard label="منسق محافظة Club" value={roleStats.governorCoordinators} accent="brand" />
+        <StatCard label="منسق لجنة Club" value={roleStats.committeeCoordinators} accent="amber" />
+        <StatCard label="عضو لجنة Club" value={roleStats.committeeMembers} accent="success" />
+      </div>
+
+      <Card title="أعضاء النوادي الطلابية" subtitle="Club roster" actions={<Badge tone="neutral">{clubMembers.length} عضو</Badge>}>
+        {clubMembers.length === 0 ? (
+          <EmptyState title="لا توجد بيانات نوادي طلابية" description="سيظهر هنا أعضاء النوادي الطلابية داخل نطاق صلاحياتك." />
+        ) : (
+          <div className="space-y-3">
+            {clubMembers.map((member) => (
+              <div key={member.memberId} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                <div className="flex flex-wrap items-start justify-between gap-2">
+                  <div>
+                    <p className="font-bold text-white">{member.fullName}</p>
+                    <p className="text-sm text-slate-400">{member.email}</p>
+                  </div>
+                  <Badge tone="brand">{clubRoleLabel(member.role)}</Badge>
+                </div>
+                <div className="mt-3 text-xs text-slate-300">
+                  <p>{member.governorName ? `المحافظة: ${member.governorName}` : 'بدون محافظة'}</p>
+                  <p>{member.committeeName ? `اللجنة: ${member.committeeName}` : 'بدون لجنة'}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Modal
+        open={createClubOpen}
+        onClose={() => { setCreateClubOpen(false); setClubFormError(''); }}
+        title="إنشاء نادي طلابي"
+        subtitle="Club creation"
+        footer={<><Button variant="ghost" onClick={() => { setCreateClubOpen(false); setClubFormError(''); }}>إلغاء</Button><Button type="submit" form="club-create-form"><span className="inline-flex items-center gap-2"><FiSave /> إنشاء</span></Button></>}
+      >
+        <form id="club-create-form" className="space-y-4" onSubmit={(event) => void submitCreateClub(event)}>
+          {clubFormError && (
+            <div className="rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{clubFormError}</div>
+          )}
+          <Field label="المحافظة">
+            <Select
+              value={clubGovernorateId}
+              onChange={(event) => setClubGovernorateId(event.target.value)}
+              disabled={scopeLoading || (user?.role === 'GovernorCoordinator' && visibleGovernorates.length <= 1)}
+            >
+              <option value="">اختر المحافظة</option>
+              {visibleGovernorates.map((governorate) => <option key={governorate.governorateId} value={governorate.governorateId}>{governorate.name}</option>)}
+            </Select>
+          </Field>
+          <Field label="اسم النادي الطلابي">
+            <Input value={clubForm.name} onChange={(event) => setClubForm((current) => ({ ...current, name: event.target.value }))} placeholder="مثال: نادي علوم الحاسب" />
+          </Field>
+        </form>
+      </Modal>
+
+      <Modal
+        open={createClubMemberOpen}
+        onClose={() => { setCreateClubMemberOpen(false); setClubMemberFormError(''); }}
+        title="إنشاء عضو نادي"
+        subtitle="Club member creation"
+        footer={<><Button variant="ghost" onClick={() => { setCreateClubMemberOpen(false); setClubMemberFormError(''); }}>إلغاء</Button><Button type="submit" form="club-member-create-form"><span className="inline-flex items-center gap-2"><FiSave /> إنشاء</span></Button></>}
+      >
+        <form id="club-member-create-form" className="grid gap-4 md:grid-cols-2" onSubmit={(event) => void submitCreateClubMember(event)}>
+          {clubMemberFormError && (
+            <div className="md:col-span-2 rounded-2xl border border-rose-400/20 bg-rose-400/10 px-4 py-3 text-sm text-rose-200">{clubMemberFormError}</div>
+          )}
+          <Field label="الاسم رباعي" hint="مثال: محمد علي محمود أحمد"><Input value={clubMemberForm.fullName} onChange={(event) => setClubMemberForm((current) => ({ ...current, fullName: event.target.value }))} placeholder="الاسم الكامل" /></Field>
+          <Field label="البريد الإلكتروني" hint="سيُستخدم لتسجيل الدخول"><Input value={clubMemberForm.email} onChange={(event) => setClubMemberForm((current) => ({ ...current, email: event.target.value }))} type="email" placeholder="example@domain.com" /></Field>
+          <Field label="الرقم القومي" hint="يُستخرج منه تاريخ الميلاد تلقائياً"><Input value={clubMemberForm.nationalId} onChange={(event) => {
+            const newId = event.target.value;
+            setClubMemberForm((current) => {
+              const updated = { ...current, nationalId: newId };
+              const extractedDate = extractBirthDateFromNationalId(newId);
+              if (extractedDate) {
+                updated.birthDate = extractedDate;
+              }
+              return updated;
+            });
+          }} inputMode="numeric" maxLength={14} placeholder="14 رقمًا" /></Field>
+          <Field label="تاريخ الميلاد" hint={clubMemberForm.birthDate ? `تُم استخراجه من الرقم القومي: ${clubMemberForm.birthDate.replace(/-/g, '/')}` : 'يملأ تلقائياً من الرقم القومي'}><Input value={clubMemberForm.birthDate} onChange={(event) => setClubMemberForm((current) => ({ ...current, birthDate: event.target.value }))} type="date" disabled={clubMemberForm.nationalId.length === 14} /></Field>
+
+          <Field label="الدور" className="md:col-span-2">
+            <Select value={clubMemberForm.role} onChange={(event) => setClubMemberForm((current) => ({ ...current, role: event.target.value as Role }))} disabled={allowedClubCreateRoles.length <= 1}>
+              {allowedClubCreateRoles.map((role) => <option key={role} value={role}>{clubRoleLabel(role)}</option>)}
+            </Select>
+          </Field>
+
+          {roleNeedsGovernorate(clubMemberForm.role) && (
+            <Field label="المحافظة">
+              <Select
+                value={clubMemberForm.governorateId}
+                onChange={(event) => setClubMemberForm((current) => ({ ...current, governorateId: event.target.value, committeeId: '' }))}
+                disabled={scopeLoading || ((user?.role === 'GovernorCoordinator' || user?.role === 'GovernorCommitteeCoordinator') && visibleGovernorates.length <= 1)}
+              >
+                <option value="">اختر المحافظة</option>
+                {visibleGovernorates.map((governorate) => <option key={governorate.governorateId} value={governorate.governorateId}>{governorate.name}</option>)}
+              </Select>
+            </Field>
+          )}
+
+          {roleNeedsCommittee(clubMemberForm.role) && (
+            <Field label="اللجنة">
+              <Select
+                value={clubMemberForm.committeeId}
+                onChange={(event) => setClubMemberForm((current) => ({ ...current, committeeId: event.target.value }))}
+                disabled={!clubMemberForm.governorateId || scopeLoading || (user?.role === 'GovernorCommitteeCoordinator' && committees.length <= 1)}
+              >
+                <option value="">اختر اللجنة</option>
+                {committees.map((committee) => <option key={committee.committeeId} value={committee.committeeId}>{committee.name}</option>)}
+              </Select>
+            </Field>
+          )}
+        </form>
+      </Modal>
     </div>
   );
 }
@@ -3234,6 +3860,7 @@ export default function App() {
     news: <NewsPage />,
     joinrequests: <JoinRequestsPage />,
     members: <MembersPage />,
+    studentclubs: <StudentClubsPage />,
     tasks: <TasksPage />,
     complaints: <ComplaintsPage />,
     auditlogs: <AuditLogsPage />,

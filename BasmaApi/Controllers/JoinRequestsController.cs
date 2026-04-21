@@ -80,6 +80,11 @@ public sealed class JoinRequestsController : ControllerBase
             return BadRequest(new { message = "المحافظة المختارة غير موجودة." });
         }
 
+        if (!governorate.IsVisibleInJoinForm)
+        {
+            return BadRequest(new { message = "التقديم على هذه المحافظة متوقف حاليًا. اختر محافظة أخرى." });
+        }
+
         Committee? committee = null;
         if (request.CommitteeId is not null)
         {
@@ -90,6 +95,11 @@ public sealed class JoinRequestsController : ControllerBase
             if (committee is null)
             {
                 return BadRequest(new { message = "اللجنة المختارة لا تتبع المحافظة المحددة." });
+            }
+
+            if (!committee.IsVisibleInJoinForm)
+            {
+                return BadRequest(new { message = "التقديم على هذه اللجنة متوقف حاليًا. اختر لجنة أخرى." });
             }
         }
 

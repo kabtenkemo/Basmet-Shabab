@@ -14,6 +14,7 @@ public static class AccessControl
     public const string ManagePointsPermission = "Points.Manage";
     public const string ManageComplaintsPermission = "Complaints.Manage";
     public const string ReviewJoinRequestsPermission = "JoinRequests.Review";
+    public const string ManageJoinVisibilityPermission = "JoinRequests.Visibility.Manage";
     public const string ViewDashboardPermission = "Dashboard.View";
     public const string CreateCentralMemberPermission = "Members.Create.CentralMember";
     public const string CreateGovernorCoordinatorPermission = "Members.Create.GovernorCoordinator";
@@ -114,6 +115,12 @@ public static class AccessControl
             || HasPermission(actor, ReviewJoinRequestsPermission);
     }
 
+    public static bool CanManageJoinVisibility(Member actor)
+    {
+        return actor.Role == MemberRole.President
+            || HasPermission(actor, ManageJoinVisibilityPermission);
+    }
+
     public static bool CanManageCommitteeCatalog(Member actor)
     {
         return actor.Role is MemberRole.President or MemberRole.VicePresident or MemberRole.GovernorCoordinator;
@@ -154,6 +161,12 @@ public static class AccessControl
 
     public static bool HasPermission(Member actor, string permissionKey)
     {
+        if (string.Equals(permissionKey, ManageJoinVisibilityPermission, StringComparison.OrdinalIgnoreCase)
+            && HasPermission(actor, ReviewJoinRequestsPermission))
+        {
+            return true;
+        }
+
         if (DefaultPermissionsForRole(actor.Role)
             .Any(permission => string.Equals(permission, permissionKey, StringComparison.OrdinalIgnoreCase)))
         {
@@ -167,8 +180,8 @@ public static class AccessControl
     {
         return role switch
         {
-            MemberRole.President => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ReviewJoinRequestsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
-            MemberRole.VicePresident => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
+            MemberRole.President => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ReviewJoinRequestsPermission, ManageJoinVisibilityPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
+            MemberRole.VicePresident => [ManageUsersPermission, ManageRolesPermission, ManagePointsPermission, ManageComplaintsPermission, ManageJoinVisibilityPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCoordinatorPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
             MemberRole.CentralMember => [ManageUsersPermission, ManageComplaintsPermission, ViewDashboardPermission],
             MemberRole.GovernorCoordinator => [ManageUsersPermission, ReviewJoinRequestsPermission, ViewDashboardPermission, CreateCentralMemberPermission, CreateGovernorCommitteeCoordinatorPermission, CreateCommitteeMemberPermission],
             MemberRole.GovernorCommitteeCoordinator => [ManageUsersPermission, ViewDashboardPermission, CreateCommitteeMemberPermission],
@@ -190,9 +203,17 @@ public static class AccessControl
 
     public static IReadOnlyList<string> GetEffectivePermissions(Member member)
     {
-        return DefaultPermissionsForRole(member.Role)
+        var effectivePermissions = DefaultPermissionsForRole(member.Role)
             .Concat(member.PermissionGrants.Select(grant => grant.PermissionKey))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+
+        if (effectivePermissions.Any(permission => string.Equals(permission, ReviewJoinRequestsPermission, StringComparison.OrdinalIgnoreCase))
+            && !effectivePermissions.Any(permission => string.Equals(permission, ManageJoinVisibilityPermission, StringComparison.OrdinalIgnoreCase)))
+        {
+            effectivePermissions.Add(ManageJoinVisibilityPermission);
+        }
+
+        return effectivePermissions;
     }
 }

@@ -305,6 +305,22 @@ export async function getGovernorates() {
   return request<GovernorateOption[]>({ method: 'GET', url: '/api/governorates' });
 }
 
+export async function updateGovernorateJoinVisibility(governorateId: string, isVisibleInJoinForm: boolean) {
+  return request<GovernorateOption>({
+    method: 'PATCH',
+    url: `/api/governorates/${governorateId}/join-visibility`,
+    data: { isVisibleInJoinForm }
+  });
+}
+
+export async function updateCommitteeJoinVisibility(governorateId: string, committeeId: string, isVisibleInJoinForm: boolean) {
+  return request<CommitteeOption>({
+    method: 'PATCH',
+    url: `/api/governorates/${governorateId}/committees/${committeeId}/join-visibility`,
+    data: { isVisibleInJoinForm }
+  });
+}
+
 export async function getGovernorateCommittees(governorateId: string) {
   return request<CommitteeOption[]>({ method: 'GET', url: `/api/governorates/${governorateId}/committees` });
 }
@@ -397,6 +413,10 @@ export async function updateTask(id: string, task: TaskFormState) {
 
 export async function deleteTask(id: string) {
   return request({ method: 'DELETE', url: `/api/tasks/${id}` });
+}
+
+export async function completeTask(id: string) {
+  return request<TaskItem>({ method: 'POST', url: `/api/tasks/${id}/complete` });
 }
 
 export async function getMyComplaints() {

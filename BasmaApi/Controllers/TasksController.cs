@@ -243,6 +243,42 @@ public sealed class TasksController : ControllerBase
         return Ok(Map(task));
     }
 
+    [HttpPost("{id:guid}/complete")]
+    public async Task<ActionResult<TaskResponse>> CompleteTask(Guid id, CancellationToken cancellationToken)
+    {
+        var currentMember = await GetCurrentMemberAsync(cancellationToken);
+        if (currentMember is null)
+        {
+            return Unauthorized();
+        }
+
+        var task = await _dbContext.Tasks
+            .Include(item => item.TargetRoles)
+            .Include(item => item.TargetMembers)
+            .FirstOrDefaultAsync(item => item.Id == id, cancellationToken);
+
+        if (task is null)
+        {
+            return NotFound();
+        }
+
+        if (!IsVisibleToMember(task, currentMember))
+        {
+            return NotFound();
+        }
+
+        if (task.IsCompleted)
+        {
+            return Ok(Map(task));
+        }
+
+        task.IsCompleted = true;
+        await AddCompletionPointsAsync(currentMember.Id, $"إتمام المهمة: {task.Title}", cancellationToken);
+
+        await _dbContext.SaveChangesAsync(cancellationToken);
+        return Ok(Map(task));
+    }
+
     [HttpDelete("{id:guid}")]
     public async Task<IActionResult> DeleteTask(Guid id, CancellationToken cancellationToken)
     {

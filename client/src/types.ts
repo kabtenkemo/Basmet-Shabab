@@ -12,6 +12,7 @@ export type SectionKey =
   | 'news'
   | 'joinrequests'
   | 'members'
+  | 'studentclubs'
   | 'tasks'
   | 'complaints'
   | 'auditlogs'
@@ -253,6 +254,7 @@ export type AuditLogFilters = {
 export type GovernorateOption = {
   governorateId: string;
   name: string;
+  isVisibleInJoinForm: boolean;
 };
 
 export type CommitteeOption = {
@@ -260,6 +262,7 @@ export type CommitteeOption = {
   governorateId: string;
   governorateName: string;
   name: string;
+  isVisibleInJoinForm: boolean;
   createdAtUtc: string;
 };
 

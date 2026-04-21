@@ -10,15 +10,7 @@ namespace BasmaApi.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.Sql(@"
-IF COL_LENGTH('dbo.Members', 'CommitteeName') IS NOT NULL
-    ALTER TABLE [dbo].[Members] DROP COLUMN [CommitteeName];
-");
-
-            migrationBuilder.Sql(@"
-IF COL_LENGTH('dbo.Members', 'GovernorName') IS NOT NULL
-    ALTER TABLE [dbo].[Members] DROP COLUMN [GovernorName];
-");
+            // Intentionally no-op to preserve existing scope data.
         }
 
         /// <inheritdoc />

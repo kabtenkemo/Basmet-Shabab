@@ -6,5 +6,7 @@ public sealed class Governorate
 
     public string Name { get; set; } = string.Empty;
 
+    public bool IsVisibleInJoinForm { get; set; } = true;
+
     public ICollection<Committee> Committees { get; set; } = new List<Committee>();
 }

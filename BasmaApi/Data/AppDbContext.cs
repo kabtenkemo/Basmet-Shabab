@@ -229,12 +229,14 @@ public sealed class AppDbContext : DbContext
         {
             entity.HasIndex(governorate => governorate.Name).IsUnique();
             entity.Property(governorate => governorate.Name).HasMaxLength(120);
+            entity.Property(governorate => governorate.IsVisibleInJoinForm).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<Committee>(entity =>
         {
             entity.HasIndex(committee => new { committee.GovernorateId, committee.Name }).IsUnique();
             entity.Property(committee => committee.Name).HasMaxLength(120);
+            entity.Property(committee => committee.IsVisibleInJoinForm).HasDefaultValue(true);
             entity.Property(committee => committee.CreatedAtUtc).HasColumnName("CreatedAtUtc");
 
             entity.HasOne(committee => committee.Governorate)

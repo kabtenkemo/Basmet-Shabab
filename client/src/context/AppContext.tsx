@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import {
   adjustPoints,
   changePassword as submitPasswordChangeRequest,
+  completeTask,
   createComplaint,
   createImportantContact,
   createJoinRequest,
@@ -115,6 +116,7 @@ interface AppContextValue {
   createTaskItem: (form: TaskFormState) => Promise<void>;
   updateTaskItem: (id: string, form: TaskFormState) => Promise<void>;
   deleteTaskItem: (id: string) => Promise<void>;
+  completeTaskItem: (id: string) => Promise<void>;
   createComplaintItem: (form: ComplaintFormState) => Promise<void>;
   submitJoinRequest: (form: TeamJoinRequestCreateState) => Promise<TeamJoinRequest>;
   createNewsItem: (form: NewsCreateState) => Promise<void>;
@@ -137,6 +139,7 @@ const sectionLabels: Partial<Record<SectionKey, string>> = {
   news: 'الأخبار',
   joinrequests: 'المتقدمين',
   members: 'الأعضاء',
+  studentclubs: 'النوادي الطلابية',
   tasks: 'المهام',
   complaints: 'الشكاوى',
   auditlogs: 'سجل التدقيق',
@@ -153,10 +156,11 @@ const navigationSeed: NavigationItem[] = [
   { key: 'news', label: 'الأخبار', icon: 'news', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'joinrequests', label: 'المتقدمين', icon: 'requests', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'], permissionKey: 'JoinRequests.Review' },
   { key: 'members', label: 'الأعضاء', icon: 'users', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator'] },
+  { key: 'studentclubs', label: 'النوادي الطلابية', icon: 'users', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator'], permissionKey: 'Users.Manage' },
   { key: 'tasks', label: 'المهام', icon: 'check', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'complaints', label: 'الشكاوى', icon: 'message', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'auditlogs', label: 'سجل التدقيق', icon: 'activity', roles: ['President'] },
-  { key: 'committees', label: 'اللجان', icon: 'layers', roles: ['President', 'VicePresident', 'GovernorCoordinator'] },
+  { key: 'committees', label: 'اللجان', icon: 'layers', roles: ['President', 'VicePresident', 'GovernorCoordinator', 'GovernorCommitteeCoordinator'] },
   { key: 'importantcontacts', label: 'الشخصيات الهامة', icon: 'phone', roles: ['President', 'VicePresident'] },
   { key: 'suggestions', label: 'المقترحات', icon: 'suggestions', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'] },
   { key: 'reports', label: 'التقارير', icon: 'chart', roles: ['President', 'VicePresident', 'CentralMember', 'GovernorCoordinator'] },
@@ -748,6 +752,21 @@ export function AppProvider({ children }: PropsWithChildren) {
     }
   }, [appendActivity, loadSession]);
 
+  const completeTaskItem = useCallback(async (id: string) => {
+    setLoading(true);
+    setError('');
+    try {
+      await completeTask(id);
+      appendActivity('إتمام مهمة', 'تم تعليم المهمة كمكتملة.', 'success');
+      await loadSession();
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : 'تعذر إتمام المهمة');
+      throw actionError;
+    } finally {
+      setLoading(false);
+    }
+  }, [appendActivity, loadSession]);
+
   const createComplaintItem = useCallback(async (form: ComplaintFormState) => {
     setLoading(true);
     setError('');
@@ -909,6 +928,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     createTaskItem,
     updateTaskItem,
     deleteTaskItem,
+    completeTaskItem,
     createComplaintItem,
     submitJoinRequest,
     createNewsItem,
@@ -943,6 +963,7 @@ export function AppProvider({ children }: PropsWithChildren) {
     createMemberItem,
     deleteMemberItem,
     createTaskItem,
+    completeTaskItem,
     createImportantContactItem,
     unreadActivityCount,
     notice,

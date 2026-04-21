@@ -13,7 +13,7 @@ public sealed class ComplaintEscalationWorker : BackgroundService
     {
         _scopeFactory = scopeFactory;
         _logger = logger;
-        var minutes = int.TryParse(configuration["Complaints:EscalationIntervalMinutes"], out var parsed) ? parsed : 15;
+        var minutes = int.TryParse(configuration["Complaints:EscalationIntervalMinutes"], out var parsed) ? parsed : 1440;
         _interval = TimeSpan.FromMinutes(Math.Max(1, minutes));
     }
 

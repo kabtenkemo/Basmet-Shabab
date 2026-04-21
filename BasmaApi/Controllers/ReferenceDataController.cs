@@ -59,10 +59,15 @@ public sealed class ReferenceDataController : ControllerBase
     {
         await EnsureGovernoratesSeededAsync(cancellationToken);
 
-        var governorates = await _dbContext.Governorates
-            .AsNoTracking()
+        var governoratesQuery = _dbContext.Governorates.AsNoTracking();
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            governoratesQuery = governoratesQuery.Where(governorate => governorate.IsVisibleInJoinForm);
+        }
+
+        var governorates = await governoratesQuery
             .OrderBy(governorate => governorate.Name)
-            .Select(governorate => new GovernorateResponse(governorate.Id, governorate.Name))
+            .Select(governorate => new GovernorateResponse(governorate.Id, governorate.Name, governorate.IsVisibleInJoinForm))
             .ToListAsync(cancellationToken);
 
         return Ok(governorates);
@@ -72,19 +77,129 @@ public sealed class ReferenceDataController : ControllerBase
     [HttpGet("{governorateId:guid}/committees")]
     public async Task<ActionResult<IEnumerable<CommitteeResponse>>> GetCommittees(Guid governorateId, CancellationToken cancellationToken)
     {
-        var committees = await _dbContext.Committees
+        var committeesQuery = _dbContext.Committees
             .AsNoTracking()
-            .Where(committee => committee.GovernorateId == governorateId)
+            .Where(committee => committee.GovernorateId == governorateId);
+
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            committeesQuery = committeesQuery.Where(committee => committee.IsVisibleInJoinForm);
+        }
+
+        var committees = await committeesQuery
             .OrderBy(committee => committee.Name)
             .Select(committee => new CommitteeResponse(
                 committee.Id,
                 committee.GovernorateId,
                 committee.Governorate.Name,
                 committee.Name,
+                committee.IsVisibleInJoinForm,
                 committee.CreatedAtUtc))
             .ToListAsync(cancellationToken);
 
         return Ok(committees);
+    }
+
+    [HttpPatch("{governorateId:guid}/join-visibility")]
+    public async Task<ActionResult<GovernorateResponse>> UpdateJoinVisibility(Guid governorateId, [FromBody] GovernorateJoinVisibilityRequest request, CancellationToken cancellationToken)
+    {
+        var currentMember = await GetCurrentMemberAsync(cancellationToken);
+        if (currentMember is null)
+        {
+            return Unauthorized();
+        }
+
+        if (!AccessControl.CanManageJoinVisibility(currentMember))
+        {
+            return Forbid();
+        }
+
+        if (currentMember.Role == MemberRole.GovernorCommitteeCoordinator)
+        {
+            return Forbid();
+        }
+
+        var governorate = await _dbContext.Governorates.FirstOrDefaultAsync(item => item.Id == governorateId, cancellationToken);
+        if (governorate is null)
+        {
+            return NotFound(new { message = "المحافظة غير موجودة." });
+        }
+
+        var canManageAnyGovernorate = currentMember.Role is MemberRole.President or MemberRole.VicePresident;
+        if (!canManageAnyGovernorate && !IsSameGovernorate(currentMember, governorate))
+        {
+            return Forbid();
+        }
+
+        governorate.IsVisibleInJoinForm = request.IsVisibleInJoinForm;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Join form visibility for governorate {GovernorateId} set to {IsVisibleInJoinForm} by member {MemberId}.",
+            governorateId,
+            governorate.IsVisibleInJoinForm,
+            currentMember.Id);
+
+        return Ok(new GovernorateResponse(governorate.Id, governorate.Name, governorate.IsVisibleInJoinForm));
+    }
+
+    [HttpPatch("{governorateId:guid}/committees/{committeeId:guid}/join-visibility")]
+    public async Task<ActionResult<CommitteeResponse>> UpdateCommitteeJoinVisibility(Guid governorateId, Guid committeeId, [FromBody] CommitteeJoinVisibilityRequest request, CancellationToken cancellationToken)
+    {
+        var currentMember = await GetCurrentMemberAsync(cancellationToken);
+        if (currentMember is null)
+        {
+            return Unauthorized();
+        }
+
+        var canManageAsCommitteeCoordinator = currentMember.Role == MemberRole.GovernorCommitteeCoordinator;
+        if (!canManageAsCommitteeCoordinator && !AccessControl.CanManageJoinVisibility(currentMember))
+        {
+            return Forbid();
+        }
+
+        var committee = await _dbContext.Committees
+            .Include(item => item.Governorate)
+            .FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
+
+        if (committee is null)
+        {
+            return NotFound(new { message = "اللجنة غير موجودة." });
+        }
+
+        var canManageAnyGovernorate = currentMember.Role is MemberRole.President or MemberRole.VicePresident;
+        if (!canManageAnyGovernorate)
+        {
+            if (canManageAsCommitteeCoordinator)
+            {
+                if (!IsSameCommittee(currentMember, committee))
+                {
+                    return Forbid();
+                }
+            }
+            else if (!IsSameGovernorate(currentMember, committee.Governorate))
+            {
+                return Forbid();
+            }
+        }
+
+        committee.IsVisibleInJoinForm = request.IsVisibleInJoinForm;
+        await _dbContext.SaveChangesAsync(cancellationToken);
+
+        _logger.LogInformation(
+            "Join form visibility for committee {CommitteeId} in governorate {GovernorateId} set to {IsVisibleInJoinForm} by member {MemberId}.",
+            committeeId,
+            governorateId,
+            committee.IsVisibleInJoinForm,
+            currentMember.Id);
+
+        return Ok(new CommitteeResponse(
+            committee.Id,
+            committee.GovernorateId,
+            committee.Governorate.Name,
+            committee.Name,
+            committee.IsVisibleInJoinForm,
+            committee.CreatedAtUtc));
     }
 
     [HttpPost("{governorateId:guid}/committees")]
@@ -107,7 +222,7 @@ public sealed class ReferenceDataController : ControllerBase
             return NotFound(new { message = "المحافظة غير موجودة." });
         }
 
-        if (currentMember.Role == MemberRole.GovernorCoordinator && !string.Equals(currentMember.GovernorName, governorate.Name, StringComparison.OrdinalIgnoreCase))
+        if (currentMember.Role == MemberRole.GovernorCoordinator && !IsSameGovernorate(currentMember, governorate))
         {
             return Forbid();
         }
@@ -133,6 +248,7 @@ public sealed class ReferenceDataController : ControllerBase
             committee.GovernorateId,
             governorate.Name,
             committee.Name,
+            committee.IsVisibleInJoinForm,
             committee.CreatedAtUtc));
     }
 
@@ -157,7 +273,7 @@ public sealed class ReferenceDataController : ControllerBase
         }
 
         if (currentMember.Role == MemberRole.GovernorCoordinator
-            && !string.Equals(currentMember.GovernorName, governorate.Name, StringComparison.OrdinalIgnoreCase))
+            && !IsSameGovernorate(currentMember, governorate))
         {
             return Forbid();
         }
@@ -220,6 +336,37 @@ public sealed class ReferenceDataController : ControllerBase
         }
     }
 
+    private static bool IsSameGovernorate(Member member, Governorate governorate)
+    {
+        if (member.GovernorateId is not null && member.GovernorateId == governorate.Id)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(member.GovernorName))
+        {
+            return string.Equals(member.GovernorName.Trim(), governorate.Name.Trim(), StringComparison.OrdinalIgnoreCase);
+        }
+
+        return false;
+    }
+
+    private static bool IsSameCommittee(Member member, Committee committee)
+    {
+        if (member.CommitteeId is not null && member.CommitteeId == committee.Id)
+        {
+            return true;
+        }
+
+        if (!string.IsNullOrWhiteSpace(member.CommitteeName))
+        {
+            return string.Equals(member.CommitteeName.Trim(), committee.Name.Trim(), StringComparison.OrdinalIgnoreCase)
+                && IsSameGovernorate(member, committee.Governorate);
+        }
+
+        return false;
+    }
+
     private async Task<Member?> GetCurrentMemberAsync(CancellationToken cancellationToken)
     {
         var memberId = User.GetMemberId();
@@ -228,6 +375,8 @@ public sealed class ReferenceDataController : ControllerBase
             return null;
         }
 
-        return await _dbContext.Members.FirstOrDefaultAsync(member => member.Id == memberId.Value, cancellationToken);
+        return await _dbContext.Members
+            .Include(member => member.PermissionGrants)
+            .FirstOrDefaultAsync(member => member.Id == memberId.Value, cancellationToken);
     }
 }
