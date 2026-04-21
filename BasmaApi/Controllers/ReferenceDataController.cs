@@ -82,18 +82,32 @@ public sealed class ReferenceDataController : ControllerBase
 
         async Task<List<CommitteeResponse>> LoadCommitteesAsync()
         {
+            var hasIsStudentClubColumn = await CommitteesColumnExistsAsync("IsStudentClub", cancellationToken);
+            var hasIsVisibleInJoinFormColumn = await CommitteesColumnExistsAsync("IsVisibleInJoinForm", cancellationToken);
+            var hasCreatedAtUtcColumn = await CommitteesColumnExistsAsync("CreatedAtUtc", cancellationToken);
+
+            var isStudentClubSelect = hasIsStudentClubColumn
+                ? "c.IsStudentClub"
+                : "CAST(0 AS bit) AS IsStudentClub";
+            var isVisibleInJoinFormSelect = hasIsVisibleInJoinFormColumn
+                ? "c.IsVisibleInJoinForm"
+                : "CAST(1 AS bit) AS IsVisibleInJoinForm";
+            var createdAtUtcSelect = hasCreatedAtUtcColumn
+                ? "c.CreatedAtUtc"
+                : "SYSUTCDATETIME() AS CreatedAtUtc";
+
             var sql = @"
 SELECT
     c.Id,
     c.GovernorateId,
     COALESCE(g.Name, N'غير محددة') AS GovernorateName,
     c.Name,
-    c.IsStudentClub,
-    c.IsVisibleInJoinForm,
-    c.CreatedAtUtc
+    " + isStudentClubSelect + @",
+    " + isVisibleInJoinFormSelect + @",
+    " + createdAtUtcSelect + @"
 FROM dbo.Committees AS c
 LEFT JOIN dbo.Governorates AS g ON g.Id = c.GovernorateId
-WHERE
+WHERE (
     c.GovernorateId = @GovernorateId
     OR (
         NOT EXISTS (SELECT 1 FROM dbo.Committees WHERE GovernorateId = @GovernorateId)
@@ -103,15 +117,25 @@ WHERE
             WHERE selectedGovernorate.Id = @GovernorateId
               AND LOWER(selectedGovernorate.Name) = LOWER(COALESCE(g.Name, N''))
         )
-    )";
+    ))";
 
             if (normalizedKind == "club")
             {
-                sql += @" AND c.IsStudentClub = 1";
+                if (hasIsStudentClubColumn)
+                {
+                    sql += @" AND c.IsStudentClub = 1";
+                }
+                else
+                {
+                    return new List<CommitteeResponse>();
+                }
             }
             else if (normalizedKind != "all")
             {
-                sql += @" AND c.IsStudentClub = 0";
+                if (hasIsStudentClubColumn)
+                {
+                    sql += @" AND c.IsStudentClub = 0";
+                }
             }
 
             sql += @" ORDER BY c.Name";
@@ -271,8 +295,13 @@ WHERE
     }
 
     [HttpPost("{governorateId:guid}/committees")]
-    public async Task<ActionResult<CommitteeResponse>> CreateCommittee(Guid governorateId, [FromBody] CommitteeCreateRequest request, CancellationToken cancellationToken)
+    public async Task<ActionResult<CommitteeResponse>> CreateCommittee(Guid governorateId, [FromBody] CommitteeCreateRequest? request, CancellationToken cancellationToken)
     {
+        if (request is null)
+        {
+            return BadRequest(new { message = "بيانات إنشاء اللجنة غير صالحة." });
+        }
+
         var currentMember = await GetCurrentMemberAsync(cancellationToken);
         if (currentMember is null)
         {
@@ -295,13 +324,13 @@ WHERE
             return Forbid();
         }
 
-        var committeeName = request.Name.Trim();
+        var committeeName = request.Name?.Trim() ?? string.Empty;
         if (string.IsNullOrWhiteSpace(committeeName))
         {
             return BadRequest(new { message = "اسم اللجنة مطلوب." });
         }
 
-        var normalizedCommitteeName = committeeName.ToLower();
+        var normalizedCommitteeName = committeeName.ToLowerInvariant();
         var exists = await _dbContext.Committees.AnyAsync(
             committee => committee.GovernorateId == governorate.Id && committee.Name.ToLower() == normalizedCommitteeName,
             cancellationToken);
@@ -325,17 +354,60 @@ WHERE
         catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
         {
             _logger.LogWarning(ex, "Committee creation failed due to schema mismatch. Attempting schema repair.");
-            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
-
-            var duplicateAfterRepair = await _dbContext.Committees.AnyAsync(
-                item => item.GovernorateId == governorate.Id && item.Name.ToLower() == normalizedCommitteeName,
-                cancellationToken);
-            if (duplicateAfterRepair)
+            try
             {
-                return Conflict(new { message = "هذه اللجنة موجودة بالفعل داخل المحافظة المحددة." });
-            }
+                DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
 
-            await _dbContext.SaveChangesAsync(cancellationToken);
+                var duplicateAfterRepair = await _dbContext.Committees.AnyAsync(
+                    item => item.GovernorateId == governorate.Id && item.Name.ToLower() == normalizedCommitteeName,
+                    cancellationToken);
+                if (duplicateAfterRepair)
+                {
+                    return Conflict(new { message = "هذه اللجنة موجودة بالفعل داخل المحافظة المحددة." });
+                }
+
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception repairEx) when (DatabaseSchemaEnsurer.IsSchemaMismatch(repairEx))
+            {
+                _logger.LogWarning(repairEx, "Committee creation still failing after schema repair. Falling back to legacy insert.");
+
+                var hasIsStudentClubColumn = await CommitteesColumnExistsAsync("IsStudentClub", cancellationToken);
+                var hasIsVisibleInJoinFormColumn = await CommitteesColumnExistsAsync("IsVisibleInJoinForm", cancellationToken);
+                var hasCreatedAtUtcColumn = await CommitteesColumnExistsAsync("CreatedAtUtc", cancellationToken);
+
+                try
+                {
+                    await InsertCommitteeLegacyAsync(
+                        committee,
+                        request.IsStudentClub,
+                        hasIsStudentClubColumn,
+                        hasIsVisibleInJoinFormColumn,
+                        hasCreatedAtUtcColumn,
+                        cancellationToken);
+
+                    _dbContext.Entry(committee).State = EntityState.Detached;
+
+                    return CreatedAtAction(nameof(GetCommittees), new { governorateId }, new CommitteeResponse(
+                        committee.Id,
+                        committee.GovernorateId,
+                        governorate.Name,
+                        committee.Name,
+                        hasIsStudentClubColumn ? request.IsStudentClub : false,
+                        true,
+                        hasCreatedAtUtcColumn ? committee.CreatedAtUtc : DateTime.UtcNow));
+                }
+                catch (DbUpdateException dbEx) when (DatabaseSchemaEnsurer.IsUniqueConstraintViolation(dbEx))
+                {
+                    _logger.LogWarning(dbEx, "Duplicate committee create attempt (legacy fallback) for governorate {GovernorateId} and name {CommitteeName}.", governorate.Id, committeeName);
+                    return Conflict(new { message = "هذه اللجنة موجودة بالفعل داخل المحافظة المحددة." });
+                }
+                catch (SqlException sqlEx) when (DatabaseSchemaEnsurer.IsUniqueConstraintViolation(sqlEx))
+                {
+                    _logger.LogWarning(sqlEx, "Duplicate committee create attempt (legacy fallback) for governorate {GovernorateId} and name {CommitteeName}.", governorate.Id, committeeName);
+                    return Conflict(new { message = "هذه اللجنة موجودة بالفعل داخل المحافظة المحددة." });
+                }
+            }
         }
         catch (DbUpdateException dbEx) when (DatabaseSchemaEnsurer.IsUniqueConstraintViolation(dbEx))
         {
@@ -351,6 +423,68 @@ WHERE
             committee.IsStudentClub,
             committee.IsVisibleInJoinForm,
             committee.CreatedAtUtc));
+    }
+
+    private async Task<bool> CommitteesColumnExistsAsync(string columnName, CancellationToken cancellationToken)
+    {
+        var connection = _dbContext.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = "SELECT CASE WHEN COL_LENGTH('dbo.Committees', @ColumnName) IS NULL THEN 0 ELSE 1 END";
+
+        var parameter = command.CreateParameter();
+        parameter.ParameterName = "@ColumnName";
+        parameter.Value = columnName;
+        command.Parameters.Add(parameter);
+
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result) == 1;
+    }
+
+    private async Task InsertCommitteeLegacyAsync(
+        Committee committee,
+        bool isStudentClub,
+        bool hasIsStudentClubColumn,
+        bool hasIsVisibleInJoinFormColumn,
+        bool hasCreatedAtUtcColumn,
+        CancellationToken cancellationToken)
+    {
+        var columns = new List<string> { "Id", "GovernorateId", "Name" };
+        var values = new List<string> { "@Id", "@GovernorateId", "@Name" };
+        var parameters = new List<SqlParameter>
+        {
+            new("@Id", committee.Id),
+            new("@GovernorateId", committee.GovernorateId),
+            new("@Name", committee.Name)
+        };
+
+        if (hasIsStudentClubColumn)
+        {
+            columns.Add("IsStudentClub");
+            values.Add("@IsStudentClub");
+            parameters.Add(new SqlParameter("@IsStudentClub", isStudentClub));
+        }
+
+        if (hasIsVisibleInJoinFormColumn)
+        {
+            columns.Add("IsVisibleInJoinForm");
+            values.Add("@IsVisibleInJoinForm");
+            parameters.Add(new SqlParameter("@IsVisibleInJoinForm", true));
+        }
+
+        if (hasCreatedAtUtcColumn)
+        {
+            columns.Add("CreatedAtUtc");
+            values.Add("@CreatedAtUtc");
+            parameters.Add(new SqlParameter("@CreatedAtUtc", committee.CreatedAtUtc));
+        }
+
+        var sql = $"INSERT INTO dbo.Committees ({string.Join(", ", columns)}) VALUES ({string.Join(", ", values)})";
+        await _dbContext.Database.ExecuteSqlRawAsync(sql, parameters.Cast<object>().ToArray(), cancellationToken);
     }
 
     [HttpDelete("{governorateId:guid}/committees/{committeeId:guid}")]

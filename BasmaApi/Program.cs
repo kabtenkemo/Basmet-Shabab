@@ -83,7 +83,7 @@ builder.Services.AddCors(options =>
             .WithOrigins(
                 "http://localhost:5173",
                 "https://basmet-shabab.netlify.app")
-            .WithMethods("GET", "POST", "PUT", "DELETE")
+            .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             .WithHeaders("Content-Type", "Authorization")
             .AllowCredentials();
     });
