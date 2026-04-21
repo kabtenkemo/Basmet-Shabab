@@ -221,9 +221,17 @@ public sealed class JoinRequestsController : ControllerBase
         catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
         {
             _logger.LogWarning(ex, "Join request list failed due to schema mismatch. Attempting schema repair.");
-            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
-            DatabaseSchemaEnsurer.EnsureJoinRequestsSchema(_dbContext);
-            items = await LoadItemsAsync();
+            try
+            {
+                DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+                DatabaseSchemaEnsurer.EnsureJoinRequestsSchema(_dbContext);
+                items = await LoadItemsAsync();
+            }
+            catch (Exception repairEx)
+            {
+                _logger.LogError(repairEx, "Schema repair for join request list failed. Returning empty list to avoid request failure.");
+                items = [];
+            }
         }
 
         var missingGovernorates = items.Count(item => item.Governorate is null);

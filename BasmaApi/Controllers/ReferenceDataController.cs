@@ -118,8 +118,16 @@ public sealed class ReferenceDataController : ControllerBase
         catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
         {
             _logger.LogWarning(ex, "Committee list failed due to schema mismatch. Attempting schema repair.");
-            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
-            committees = await LoadCommitteesAsync();
+            try
+            {
+                DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+                committees = await LoadCommitteesAsync();
+            }
+            catch (Exception repairEx)
+            {
+                _logger.LogError(repairEx, "Schema repair for committee list failed. Returning empty list to avoid request failure.");
+                committees = [];
+            }
         }
 
         var missingGovernorates = committees.Count(item => string.IsNullOrWhiteSpace(item.GovernorateName) || item.GovernorateName == "غير محددة");
