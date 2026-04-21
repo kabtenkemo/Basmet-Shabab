@@ -81,6 +81,7 @@ public sealed class ReferenceDataController : ControllerBase
 
         var committeesQuery = _dbContext.Committees
             .AsNoTracking()
+            .Include(committee => committee.Governorate)
             .Where(committee => committee.GovernorateId == governorateId);
 
         committeesQuery = normalizedKind switch
@@ -100,12 +101,21 @@ public sealed class ReferenceDataController : ControllerBase
             .Select(committee => new CommitteeResponse(
                 committee.Id,
                 committee.GovernorateId,
-                committee.Governorate.Name,
+                committee.Governorate == null ? "غير محددة" : committee.Governorate.Name,
                 committee.Name,
                 committee.IsStudentClub,
                 committee.IsVisibleInJoinForm,
                 committee.CreatedAtUtc))
             .ToListAsync(cancellationToken);
+
+        var missingGovernorates = committees.Count(item => string.IsNullOrWhiteSpace(item.GovernorateName) || item.GovernorateName == "غير محددة");
+        if (missingGovernorates > 0)
+        {
+            _logger.LogWarning(
+                "Committee list for governorate {GovernorateId} returned {MissingGovernorates} items with missing governorate data.",
+                governorateId,
+                missingGovernorates);
+        }
 
         return Ok(committees);
     }

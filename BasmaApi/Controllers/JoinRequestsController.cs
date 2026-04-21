@@ -210,6 +210,16 @@ public sealed class JoinRequestsController : ControllerBase
             .ThenByDescending(item => item.CreatedAtUtc)
             .ToListAsync(cancellationToken);
 
+        var missingGovernorates = items.Count(item => item.Governorate is null);
+        var missingCommittees = items.Count(item => item.CommitteeId.HasValue && item.Committee is null);
+        if (missingGovernorates > 0 || missingCommittees > 0)
+        {
+            _logger.LogWarning(
+                "Join requests list contains {MissingGovernorates} items with missing governorates and {MissingCommittees} items with missing committees.",
+                missingGovernorates,
+                missingCommittees);
+        }
+
         _logger.LogInformation(
             "Join requests list for {MemberId} role {Role} governorateId {GovernorateId} governorName {GovernorName} returned {Count} items.",
             currentMember.Id,
@@ -366,6 +376,9 @@ public sealed class JoinRequestsController : ControllerBase
 
     private static TeamJoinRequestResponse MapResponse(TeamJoinRequest item)
     {
+        var governorateName = item.Governorate?.Name ?? "غير محددة";
+        var committeeName = item.Committee?.Name;
+
         return new TeamJoinRequestResponse(
             item.Id,
             item.FullName,
@@ -374,9 +387,9 @@ public sealed class JoinRequestsController : ControllerBase
             item.NationalId,
             item.BirthDate,
             item.GovernorateId,
-            item.Governorate.Name,
+            governorateName,
             item.CommitteeId,
-            item.Committee?.Name,
+            committeeName,
             item.Motivation,
             item.Experience,
             item.Status.ToString(),
