@@ -12,6 +12,24 @@ namespace BasmaApi.Controllers;
 [Route("api/join-requests")]
 public sealed class JoinRequestsController : ControllerBase
 {
+    private sealed record JoinRequestRow(
+        Guid Id,
+        string FullName,
+        string Email,
+        string PhoneNumber,
+        string? NationalId,
+        DateOnly? BirthDate,
+        Guid GovernorateId,
+        Guid? CommitteeId,
+        string Motivation,
+        string? Experience,
+        string Status,
+        string? AdminNotes,
+        Guid? AssignedToMemberId,
+        Guid? ReviewedByMemberId,
+        DateTime CreatedAtUtc,
+        DateTime? ReviewedAtUtc);
+
     private readonly AppDbContext _dbContext;
     private readonly IPasswordService _passwordService;
     private readonly IConfiguration _configuration;
@@ -176,15 +194,27 @@ public sealed class JoinRequestsController : ControllerBase
             return Forbid();
         }
 
-        async Task<List<TeamJoinRequest>> LoadItemsAsync()
+        async Task<List<JoinRequestRow>> LoadItemsAsync()
         {
             var query = _dbContext.TeamJoinRequests
                 .AsNoTracking()
-                .Include(item => item.Governorate)
-                .Include(item => item.Committee)
-                .Include(item => item.AssignedToMember)
-                .Include(item => item.ReviewedByMember)
-                .AsQueryable();
+                .Select(item => new JoinRequestRow(
+                    item.Id,
+                    item.FullName,
+                    item.Email,
+                    item.PhoneNumber,
+                    item.NationalId,
+                    item.BirthDate,
+                    item.GovernorateId,
+                    item.CommitteeId,
+                    item.Motivation,
+                    item.Experience,
+                    item.Status.ToString(),
+                    item.AdminNotes,
+                    item.AssignedToMemberId,
+                    item.ReviewedByMemberId,
+                    item.CreatedAtUtc,
+                    item.ReviewedAtUtc));
 
             if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
             {
@@ -194,16 +224,11 @@ public sealed class JoinRequestsController : ControllerBase
 
                 if (currentMember.GovernorateId is not null && governorName is not null)
                 {
-                    query = query.Where(item => item.GovernorateId == currentMember.GovernorateId
-                        || item.Governorate.Name.ToLower() == governorName);
+                    query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
                 }
                 else if (currentMember.GovernorateId is not null)
                 {
                     query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
-                }
-                else if (governorName is not null)
-                {
-                    query = query.Where(item => item.Governorate.Name.ToLower() == governorName);
                 }
             }
 
@@ -213,7 +238,28 @@ public sealed class JoinRequestsController : ControllerBase
                 .ToListAsync(cancellationToken);
         }
 
-        List<TeamJoinRequest> items;
+        async Task<Dictionary<Guid, string>> LoadGovernorateNamesAsync()
+        {
+            return await _dbContext.Governorates
+                .AsNoTracking()
+                .ToDictionaryAsync(item => item.Id, item => item.Name, cancellationToken);
+        }
+
+        async Task<Dictionary<Guid, string>> LoadCommitteeNamesAsync()
+        {
+            return await _dbContext.Committees
+                .AsNoTracking()
+                .ToDictionaryAsync(item => item.Id, item => item.Name, cancellationToken);
+        }
+
+        async Task<Dictionary<Guid, string>> LoadMemberNamesAsync()
+        {
+            return await _dbContext.Members
+                .AsNoTracking()
+                .ToDictionaryAsync(item => item.Id, item => item.FullName, cancellationToken);
+        }
+
+        List<JoinRequestRow> items;
         try
         {
             items = await LoadItemsAsync();
@@ -234,15 +280,84 @@ public sealed class JoinRequestsController : ControllerBase
             }
         }
 
-        var missingGovernorates = items.Count(item => item.Governorate is null);
-        var missingCommittees = items.Count(item => item.CommitteeId.HasValue && item.Committee is null);
-        if (missingGovernorates > 0 || missingCommittees > 0)
+        if (items.Count == 0)
         {
-            _logger.LogWarning(
-                "Join requests list contains {MissingGovernorates} items with missing governorates and {MissingCommittees} items with missing committees.",
-                missingGovernorates,
-                missingCommittees);
+            return Ok(Array.Empty<TeamJoinRequestResponse>());
         }
+
+        Dictionary<Guid, string> governorateNames;
+        Dictionary<Guid, string> committeeNames;
+        Dictionary<Guid, string> memberNames;
+
+        try
+        {
+            governorateNames = await LoadGovernorateNamesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Governorate name lookup failed for join request list. Names will be omitted.");
+            governorateNames = [];
+        }
+
+        try
+        {
+            committeeNames = await LoadCommitteeNamesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Committee name lookup failed for join request list. Committee names will be omitted.");
+            committeeNames = [];
+        }
+
+        try
+        {
+            memberNames = await LoadMemberNamesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Member name lookup failed for join request list. Member names will be omitted.");
+            memberNames = [];
+        }
+
+        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident)
+            && currentMember.GovernorateId is null
+            && !string.IsNullOrWhiteSpace(currentMember.GovernorName))
+        {
+            var normalizedGovernorName = currentMember.GovernorName.Trim().ToLowerInvariant();
+            var governorateIds = governorateNames
+                .Where(item => string.Equals(item.Value.Trim(), normalizedGovernorName, StringComparison.OrdinalIgnoreCase))
+                .Select(item => item.Key)
+                .ToHashSet();
+
+            if (governorateIds.Count > 0)
+            {
+                items = items.Where(item => governorateIds.Contains(item.GovernorateId)).ToList();
+            }
+        }
+
+        var responses = items
+            .Select(item => new TeamJoinRequestResponse(
+                item.Id,
+                item.FullName,
+                item.Email,
+                item.PhoneNumber,
+                item.NationalId,
+                item.BirthDate,
+                item.GovernorateId,
+                governorateNames.TryGetValue(item.GovernorateId, out var governorateName) ? governorateName : "غير محددة",
+                item.CommitteeId,
+                item.CommitteeId.HasValue && committeeNames.TryGetValue(item.CommitteeId.Value, out var committeeName) ? committeeName : null,
+                item.Motivation,
+                item.Experience,
+                item.Status,
+                item.AdminNotes,
+                item.AssignedToMemberId,
+                item.AssignedToMemberId.HasValue && memberNames.TryGetValue(item.AssignedToMemberId.Value, out var assignedName) ? assignedName : null,
+                item.ReviewedByMemberId,
+                item.ReviewedByMemberId.HasValue && memberNames.TryGetValue(item.ReviewedByMemberId.Value, out var reviewedName) ? reviewedName : null,
+                item.CreatedAtUtc,
+                item.ReviewedAtUtc))
+            .ToList();
 
         _logger.LogInformation(
             "Join requests list for {MemberId} role {Role} governorateId {GovernorateId} governorName {GovernorName} returned {Count} items.",
@@ -250,9 +365,9 @@ public sealed class JoinRequestsController : ControllerBase
             currentMember.Role,
             currentMember.GovernorateId,
             currentMember.GovernorName,
-            items.Count);
+            responses.Count);
 
-        return Ok(items.Select(MapResponse));
+        return Ok(responses);
     }
 
     [Authorize]

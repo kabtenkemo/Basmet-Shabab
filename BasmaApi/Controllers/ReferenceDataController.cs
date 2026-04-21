@@ -78,31 +78,21 @@ public sealed class ReferenceDataController : ControllerBase
     public async Task<ActionResult<IEnumerable<CommitteeResponse>>> GetCommittees(Guid governorateId, [FromQuery] string? kind, CancellationToken cancellationToken)
     {
         var normalizedKind = kind?.Trim().ToLowerInvariant();
-        async Task<List<CommitteeResponse>> LoadCommitteesAsync()
+        async Task<Dictionary<Guid, string>> LoadGovernorateNamesAsync()
         {
-            var committeesQuery = _dbContext.Committees
+            return await _dbContext.Governorates
                 .AsNoTracking()
-                .Include(committee => committee.Governorate)
-                .Where(committee => committee.GovernorateId == governorateId);
+                .ToDictionaryAsync(governorate => governorate.Id, governorate => governorate.Name, cancellationToken);
+        }
 
-            committeesQuery = normalizedKind switch
-            {
-                "club" => committeesQuery.Where(committee => committee.IsStudentClub),
-                "all" => committeesQuery,
-                _ => committeesQuery.Where(committee => !committee.IsStudentClub)
-            };
-
-            if (User.Identity?.IsAuthenticated != true)
-            {
-                committeesQuery = committeesQuery.Where(committee => committee.IsVisibleInJoinForm);
-            }
-
-            return await committeesQuery
-                .OrderBy(committee => committee.Name)
-                .Select(committee => new CommitteeResponse(
+        async Task<List<(Guid Id, Guid GovernorateId, string Name, bool IsStudentClub, bool IsVisibleInJoinForm, DateTime CreatedAtUtc)>> LoadCommitteesAsync()
+        {
+            return await _dbContext.Committees
+                .AsNoTracking()
+                .Where(committee => committee.GovernorateId == governorateId)
+                .Select(committee => new ValueTuple<Guid, Guid, string, bool, bool, DateTime>(
                     committee.Id,
                     committee.GovernorateId,
-                    committee.Governorate == null ? "غير محددة" : committee.Governorate.Name,
                     committee.Name,
                     committee.IsStudentClub,
                     committee.IsVisibleInJoinForm,
@@ -110,7 +100,7 @@ public sealed class ReferenceDataController : ControllerBase
                 .ToListAsync(cancellationToken);
         }
 
-        List<CommitteeResponse> committees;
+        List<(Guid Id, Guid GovernorateId, string Name, bool IsStudentClub, bool IsVisibleInJoinForm, DateTime CreatedAtUtc)> committees;
         try
         {
             committees = await LoadCommitteesAsync();
@@ -130,7 +120,47 @@ public sealed class ReferenceDataController : ControllerBase
             }
         }
 
-        var missingGovernorates = committees.Count(item => string.IsNullOrWhiteSpace(item.GovernorateName) || item.GovernorateName == "غير محددة");
+        if (committees.Count == 0)
+        {
+            return Ok(Array.Empty<CommitteeResponse>());
+        }
+
+        Dictionary<Guid, string> governorateNames;
+        try
+        {
+            governorateNames = await LoadGovernorateNamesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Governorate name lookup failed for committee list. Names will be omitted.");
+            governorateNames = [];
+        }
+
+        var filteredCommittees = normalizedKind switch
+        {
+            "club" => committees.Where(item => item.IsStudentClub),
+            "all" => committees,
+            _ => committees.Where(item => !item.IsStudentClub)
+        };
+
+        if (User.Identity?.IsAuthenticated != true)
+        {
+            filteredCommittees = filteredCommittees.Where(item => item.IsVisibleInJoinForm);
+        }
+
+        var responses = filteredCommittees
+            .OrderBy(item => item.Name)
+            .Select(item => new CommitteeResponse(
+                item.Id,
+                item.GovernorateId,
+                governorateNames.TryGetValue(item.GovernorateId, out var governorateName) ? governorateName : "غير محددة",
+                item.Name,
+                item.IsStudentClub,
+                item.IsVisibleInJoinForm,
+                item.CreatedAtUtc))
+            .ToList();
+
+        var missingGovernorates = responses.Count(item => string.IsNullOrWhiteSpace(item.GovernorateName) || item.GovernorateName == "غير محددة");
         if (missingGovernorates > 0)
         {
             _logger.LogWarning(
@@ -139,7 +169,7 @@ public sealed class ReferenceDataController : ControllerBase
                 missingGovernorates);
         }
 
-        return Ok(committees);
+        return Ok(responses);
     }
 
     [HttpPatch("{governorateId:guid}/join-visibility")]
