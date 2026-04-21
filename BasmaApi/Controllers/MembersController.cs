@@ -195,6 +195,11 @@ public sealed class MembersController : ControllerBase
             return Unauthorized();
         }
 
+        if (currentMember.Id == id)
+        {
+            return Conflict(new { message = "لا يمكنك تغيير منصبك بنفسك." });
+        }
+
         if (!Enum.TryParse<MemberRole>(request.Role, ignoreCase: true, out var targetRole))
         {
             return BadRequest(new { message = "الدور غير صالح." });
@@ -268,6 +273,11 @@ public sealed class MembersController : ControllerBase
         if (currentMember is null)
         {
             return Unauthorized();
+        }
+
+        if (currentMember.Id == id)
+        {
+            return Conflict(new { message = "لا يمكنك تعديل نقاطك بنفسك." });
         }
 
         if (request.Amount == 0)
