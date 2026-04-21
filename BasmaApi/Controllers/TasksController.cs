@@ -340,6 +340,11 @@ public sealed class TasksController : ControllerBase
 
     private static bool IsVisibleToMember(MemberTask task, Member member)
     {
+        if (member.Role is MemberRole.President or MemberRole.VicePresident)
+        {
+            return true;
+        }
+
         if (task.MemberId == member.Id)
         {
             return true;
