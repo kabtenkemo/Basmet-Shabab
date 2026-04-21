@@ -515,56 +515,56 @@ END;
 
 static void EnsureNewsSchema(AppDbContext dbContext)
 {
+    dbContext.Database.ExecuteSqlRaw(@"
+IF OBJECT_ID('dbo.NewsPosts', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.NewsPosts (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_NewsPosts PRIMARY KEY,
+        Title nvarchar(250) NOT NULL,
+        Content nvarchar(4000) NOT NULL,
+        CreatedByMemberId uniqueidentifier NOT NULL,
+        AudienceType nvarchar(20) NOT NULL,
+        CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_NewsPosts_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_NewsPosts_Members_CreatedByMemberId FOREIGN KEY (CreatedByMemberId) REFERENCES dbo.Members (Id) ON DELETE NO ACTION
+    );
+END;
+
+IF OBJECT_ID('dbo.NewsTargetRoles', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.NewsTargetRoles (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_NewsTargetRoles PRIMARY KEY,
+        NewsPostId uniqueidentifier NOT NULL,
+        [Role] nvarchar(40) NOT NULL,
+        CONSTRAINT FK_NewsTargetRoles_NewsPosts_NewsPostId FOREIGN KEY (NewsPostId) REFERENCES dbo.NewsPosts (Id) ON DELETE CASCADE
+    );
+END;
+
+IF OBJECT_ID('dbo.NewsTargetMembers', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.NewsTargetMembers (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_NewsTargetMembers PRIMARY KEY,
+        NewsPostId uniqueidentifier NOT NULL,
+        MemberId uniqueidentifier NOT NULL,
+        CONSTRAINT FK_NewsTargetMembers_NewsPosts_NewsPostId FOREIGN KEY (NewsPostId) REFERENCES dbo.NewsPosts (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_NewsTargetMembers_Members_MemberId FOREIGN KEY (MemberId) REFERENCES dbo.Members (Id) ON DELETE NO ACTION
+    );
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_NewsTargetRoles_NewsPostId_Role' AND object_id = OBJECT_ID('dbo.NewsTargetRoles'))
+BEGIN
+    CREATE UNIQUE INDEX IX_NewsTargetRoles_NewsPostId_Role ON dbo.NewsTargetRoles (NewsPostId, [Role]);
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_NewsTargetMembers_NewsPostId_MemberId' AND object_id = OBJECT_ID('dbo.NewsTargetMembers'))
+BEGIN
+    CREATE UNIQUE INDEX IX_NewsTargetMembers_NewsPostId_MemberId ON dbo.NewsTargetMembers (NewsPostId, MemberId);
+END;
+" );
+}
+
+static void EnsureJoinRequestsSchema(AppDbContext dbContext)
+{
     DatabaseSchemaEnsurer.EnsureJoinRequestsSchema(dbContext);
-BEGIN
-    ALTER TABLE dbo.TeamJoinRequests ADD Experience nvarchar(3000) NULL;
-END;
-
-IF COL_LENGTH('dbo.TeamJoinRequests', 'Status') IS NULL
-BEGIN
-    ALTER TABLE dbo.TeamJoinRequests ADD Status nvarchar(30) NOT NULL CONSTRAINT DF_TeamJoinRequests_Status DEFAULT 'Pending';
-END;
-
-IF COL_LENGTH('dbo.TeamJoinRequests', 'AdminNotes') IS NULL
-BEGIN
-    ALTER TABLE dbo.TeamJoinRequests ADD AdminNotes nvarchar(2000) NULL;
-END;
-
-IF COL_LENGTH('dbo.TeamJoinRequests', 'AssignedToMemberId') IS NULL
-BEGIN
-    ALTER TABLE dbo.TeamJoinRequests ADD AssignedToMemberId uniqueidentifier NULL;
-END;
-
-IF COL_LENGTH('dbo.TeamJoinRequests', 'ReviewedByMemberId') IS NULL
-BEGIN
-    ALTER TABLE dbo.TeamJoinRequests ADD ReviewedByMemberId uniqueidentifier NULL;
-END;
-
-IF COL_LENGTH('dbo.TeamJoinRequests', 'CreatedAtUtc') IS NULL
-BEGIN
-    ALTER TABLE dbo.TeamJoinRequests ADD CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_TeamJoinRequests_CreatedAtUtc DEFAULT SYSUTCDATETIME();
-END;
-
-IF COL_LENGTH('dbo.TeamJoinRequests', 'ReviewedAtUtc') IS NULL
-BEGIN
-    ALTER TABLE dbo.TeamJoinRequests ADD ReviewedAtUtc datetime2 NULL;
-END;
-
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TeamJoinRequests_Status' AND object_id = OBJECT_ID('dbo.TeamJoinRequests'))
-BEGIN
-    CREATE INDEX IX_TeamJoinRequests_Status ON dbo.TeamJoinRequests (Status);
-END;
-
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TeamJoinRequests_CreatedAtUtc' AND object_id = OBJECT_ID('dbo.TeamJoinRequests'))
-BEGIN
-    CREATE INDEX IX_TeamJoinRequests_CreatedAtUtc ON dbo.TeamJoinRequests (CreatedAtUtc DESC);
-END;
-
-IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TeamJoinRequests_GovernorateId' AND object_id = OBJECT_ID('dbo.TeamJoinRequests'))
-BEGIN
-    CREATE INDEX IX_TeamJoinRequests_GovernorateId ON dbo.TeamJoinRequests (GovernorateId);
-END;
-");
 }
 
 static void SeedReferenceData(AppDbContext dbContext)
