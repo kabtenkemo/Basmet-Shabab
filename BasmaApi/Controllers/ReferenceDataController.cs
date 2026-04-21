@@ -519,12 +519,48 @@ WHERE (
             return NotFound(new { message = "اللجنة غير موجودة." });
         }
 
+        try
+        {
+            var deleted = await TryDeleteCommitteeAsync(committee, committeeId, cancellationToken);
+            if (!deleted)
+            {
+                return Conflict(new { message = "لا يمكن حذف اللجنة لوجود بيانات مرتبطة بها." });
+            }
+        }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex, "Committee delete failed due to schema mismatch. Attempting schema repair. CommitteeId={CommitteeId}", committeeId);
+
+            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+            DatabaseSchemaEnsurer.EnsureJoinRequestsSchema(_dbContext);
+
+            _dbContext.ChangeTracker.Clear();
+
+            var committeeAfterRepair = await _dbContext.Committees
+                .FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
+            if (committeeAfterRepair is null)
+            {
+                return NotFound(new { message = "اللجنة غير موجودة." });
+            }
+
+            var deleted = await TryDeleteCommitteeAsync(committeeAfterRepair, committeeId, cancellationToken);
+            if (!deleted)
+            {
+                return Conflict(new { message = "لا يمكن حذف اللجنة لوجود بيانات مرتبطة بها." });
+            }
+        }
+
+        return NoContent();
+    }
+
+    private async Task<bool> TryDeleteCommitteeAsync(Committee committee, Guid committeeId, CancellationToken cancellationToken)
+    {
         var hasMembersCommitteeColumn = await TableColumnExistsAsync("dbo.Members", "CommitteeId", cancellationToken);
         var hasMembers = hasMembersCommitteeColumn
             && await _dbContext.Members.AnyAsync(member => member.CommitteeId == committeeId, cancellationToken);
         if (hasMembers)
         {
-            return Conflict(new { message = "لا يمكن حذف اللجنة لوجود أعضاء مرتبطين بها." });
+            return false;
         }
 
         var hasJoinRequestsCommitteeColumn = await TableColumnExistsAsync("dbo.TeamJoinRequests", "CommitteeId", cancellationToken);
@@ -532,21 +568,39 @@ WHERE (
             && await _dbContext.TeamJoinRequests.AnyAsync(request => request.CommitteeId == committeeId, cancellationToken);
         if (hasJoinRequests)
         {
-            return Conflict(new { message = "لا يمكن حذف اللجنة لوجود طلبات انضمام مرتبطة بها." });
+            return false;
         }
 
         _dbContext.Committees.Remove(committee);
+
         try
         {
             await _dbContext.SaveChangesAsync(cancellationToken);
+            return true;
         }
         catch (DbUpdateException ex)
         {
-            _logger.LogWarning(ex, "Committee delete failed due to related data. CommitteeId={CommitteeId}", committeeId);
-            return Conflict(new { message = "لا يمكن حذف اللجنة لوجود بيانات مرتبطة بها." });
+            _logger.LogWarning(ex, "Committee delete blocked by related data. CommitteeId={CommitteeId}", committeeId);
+            return false;
+        }
+        catch (SqlException ex) when (IsForeignKeyViolation(ex))
+        {
+            _logger.LogWarning(ex, "Committee delete blocked by FK constraint. CommitteeId={CommitteeId}", committeeId);
+            return false;
+        }
+    }
+
+    private static bool IsForeignKeyViolation(SqlException exception)
+    {
+        foreach (SqlError error in exception.Errors)
+        {
+            if (error.Number == 547)
+            {
+                return true;
+            }
         }
 
-        return NoContent();
+        return false;
     }
 
     private async Task<bool> TableColumnExistsAsync(string tableName, string columnName, CancellationToken cancellationToken)
