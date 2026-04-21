@@ -519,22 +519,63 @@ WHERE (
             return NotFound(new { message = "اللجنة غير موجودة." });
         }
 
-        var hasMembers = await _dbContext.Members.AnyAsync(member => member.CommitteeId == committeeId, cancellationToken);
+        var hasMembersCommitteeColumn = await TableColumnExistsAsync("dbo.Members", "CommitteeId", cancellationToken);
+        var hasMembers = hasMembersCommitteeColumn
+            && await _dbContext.Members.AnyAsync(member => member.CommitteeId == committeeId, cancellationToken);
         if (hasMembers)
         {
             return Conflict(new { message = "لا يمكن حذف اللجنة لوجود أعضاء مرتبطين بها." });
         }
 
-        var hasJoinRequests = await _dbContext.TeamJoinRequests.AnyAsync(request => request.CommitteeId == committeeId, cancellationToken);
+        var hasJoinRequestsCommitteeColumn = await TableColumnExistsAsync("dbo.TeamJoinRequests", "CommitteeId", cancellationToken);
+        var hasJoinRequests = hasJoinRequestsCommitteeColumn
+            && await _dbContext.TeamJoinRequests.AnyAsync(request => request.CommitteeId == committeeId, cancellationToken);
         if (hasJoinRequests)
         {
             return Conflict(new { message = "لا يمكن حذف اللجنة لوجود طلبات انضمام مرتبطة بها." });
         }
 
         _dbContext.Committees.Remove(committee);
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            await _dbContext.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateException ex)
+        {
+            _logger.LogWarning(ex, "Committee delete failed due to related data. CommitteeId={CommitteeId}", committeeId);
+            return Conflict(new { message = "لا يمكن حذف اللجنة لوجود بيانات مرتبطة بها." });
+        }
 
         return NoContent();
+    }
+
+    private async Task<bool> TableColumnExistsAsync(string tableName, string columnName, CancellationToken cancellationToken)
+    {
+        var connection = _dbContext.Database.GetDbConnection();
+        await using var command = connection.CreateCommand();
+        command.CommandText = @"SELECT CASE
+    WHEN OBJECT_ID(@TableName, 'U') IS NULL THEN 0
+    WHEN COL_LENGTH(@TableName, @ColumnName) IS NULL THEN 0
+    ELSE 1
+END";
+
+        var tableParameter = command.CreateParameter();
+        tableParameter.ParameterName = "@TableName";
+        tableParameter.Value = tableName;
+        command.Parameters.Add(tableParameter);
+
+        var columnParameter = command.CreateParameter();
+        columnParameter.ParameterName = "@ColumnName";
+        columnParameter.Value = columnName;
+        command.Parameters.Add(columnParameter);
+
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(cancellationToken);
+        }
+
+        var result = await command.ExecuteScalarAsync(cancellationToken);
+        return Convert.ToInt32(result) == 1;
     }
 
     private async Task EnsureGovernoratesSeededAsync(CancellationToken cancellationToken)
