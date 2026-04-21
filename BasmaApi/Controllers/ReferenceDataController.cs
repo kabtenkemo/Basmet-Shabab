@@ -78,35 +78,49 @@ public sealed class ReferenceDataController : ControllerBase
     public async Task<ActionResult<IEnumerable<CommitteeResponse>>> GetCommittees(Guid governorateId, [FromQuery] string? kind, CancellationToken cancellationToken)
     {
         var normalizedKind = kind?.Trim().ToLowerInvariant();
-
-        var committeesQuery = _dbContext.Committees
-            .AsNoTracking()
-            .Include(committee => committee.Governorate)
-            .Where(committee => committee.GovernorateId == governorateId);
-
-        committeesQuery = normalizedKind switch
+        async Task<List<CommitteeResponse>> LoadCommitteesAsync()
         {
-            "club" => committeesQuery.Where(committee => committee.IsStudentClub),
-            "all" => committeesQuery,
-            _ => committeesQuery.Where(committee => !committee.IsStudentClub)
-        };
+            var committeesQuery = _dbContext.Committees
+                .AsNoTracking()
+                .Include(committee => committee.Governorate)
+                .Where(committee => committee.GovernorateId == governorateId);
 
-        if (User.Identity?.IsAuthenticated != true)
-        {
-            committeesQuery = committeesQuery.Where(committee => committee.IsVisibleInJoinForm);
+            committeesQuery = normalizedKind switch
+            {
+                "club" => committeesQuery.Where(committee => committee.IsStudentClub),
+                "all" => committeesQuery,
+                _ => committeesQuery.Where(committee => !committee.IsStudentClub)
+            };
+
+            if (User.Identity?.IsAuthenticated != true)
+            {
+                committeesQuery = committeesQuery.Where(committee => committee.IsVisibleInJoinForm);
+            }
+
+            return await committeesQuery
+                .OrderBy(committee => committee.Name)
+                .Select(committee => new CommitteeResponse(
+                    committee.Id,
+                    committee.GovernorateId,
+                    committee.Governorate == null ? "غير محددة" : committee.Governorate.Name,
+                    committee.Name,
+                    committee.IsStudentClub,
+                    committee.IsVisibleInJoinForm,
+                    committee.CreatedAtUtc))
+                .ToListAsync(cancellationToken);
         }
 
-        var committees = await committeesQuery
-            .OrderBy(committee => committee.Name)
-            .Select(committee => new CommitteeResponse(
-                committee.Id,
-                committee.GovernorateId,
-                committee.Governorate == null ? "غير محددة" : committee.Governorate.Name,
-                committee.Name,
-                committee.IsStudentClub,
-                committee.IsVisibleInJoinForm,
-                committee.CreatedAtUtc))
-            .ToListAsync(cancellationToken);
+        List<CommitteeResponse> committees;
+        try
+        {
+            committees = await LoadCommitteesAsync();
+        }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex, "Committee list failed due to schema mismatch. Attempting schema repair.");
+            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+            committees = await LoadCommitteesAsync();
+        }
 
         var missingGovernorates = committees.Count(item => string.IsNullOrWhiteSpace(item.GovernorateName) || item.GovernorateName == "غير محددة");
         if (missingGovernorates > 0)

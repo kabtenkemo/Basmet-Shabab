@@ -176,39 +176,55 @@ public sealed class JoinRequestsController : ControllerBase
             return Forbid();
         }
 
-        var query = _dbContext.TeamJoinRequests
-            .AsNoTracking()
-            .Include(item => item.Governorate)
-            .Include(item => item.Committee)
-            .Include(item => item.AssignedToMember)
-            .Include(item => item.ReviewedByMember)
-            .AsQueryable();
-
-        if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
+        async Task<List<TeamJoinRequest>> LoadItemsAsync()
         {
-            var governorName = string.IsNullOrWhiteSpace(currentMember.GovernorName)
-                ? null
-                : currentMember.GovernorName.Trim().ToLowerInvariant();
+            var query = _dbContext.TeamJoinRequests
+                .AsNoTracking()
+                .Include(item => item.Governorate)
+                .Include(item => item.Committee)
+                .Include(item => item.AssignedToMember)
+                .Include(item => item.ReviewedByMember)
+                .AsQueryable();
 
-            if (currentMember.GovernorateId is not null && governorName is not null)
+            if (currentMember.Role is not (MemberRole.President or MemberRole.VicePresident))
             {
-                query = query.Where(item => item.GovernorateId == currentMember.GovernorateId
-                    || item.Governorate.Name.ToLower() == governorName);
+                var governorName = string.IsNullOrWhiteSpace(currentMember.GovernorName)
+                    ? null
+                    : currentMember.GovernorName.Trim().ToLowerInvariant();
+
+                if (currentMember.GovernorateId is not null && governorName is not null)
+                {
+                    query = query.Where(item => item.GovernorateId == currentMember.GovernorateId
+                        || item.Governorate.Name.ToLower() == governorName);
+                }
+                else if (currentMember.GovernorateId is not null)
+                {
+                    query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
+                }
+                else if (governorName is not null)
+                {
+                    query = query.Where(item => item.Governorate.Name.ToLower() == governorName);
+                }
             }
-            else if (currentMember.GovernorateId is not null)
-            {
-                query = query.Where(item => item.GovernorateId == currentMember.GovernorateId);
-            }
-            else if (governorName is not null)
-            {
-                query = query.Where(item => item.Governorate.Name.ToLower() == governorName);
-            }
+
+            return await query
+                .OrderBy(item => item.Status)
+                .ThenByDescending(item => item.CreatedAtUtc)
+                .ToListAsync(cancellationToken);
         }
 
-        var items = await query
-            .OrderBy(item => item.Status)
-            .ThenByDescending(item => item.CreatedAtUtc)
-            .ToListAsync(cancellationToken);
+        List<TeamJoinRequest> items;
+        try
+        {
+            items = await LoadItemsAsync();
+        }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex, "Join request list failed due to schema mismatch. Attempting schema repair.");
+            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+            DatabaseSchemaEnsurer.EnsureJoinRequestsSchema(_dbContext);
+            items = await LoadItemsAsync();
+        }
 
         var missingGovernorates = items.Count(item => item.Governorate is null);
         var missingCommittees = items.Count(item => item.CommitteeId.HasValue && item.Committee is null);
