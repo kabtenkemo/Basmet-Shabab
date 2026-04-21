@@ -321,12 +321,27 @@ export async function updateCommitteeJoinVisibility(governorateId: string, commi
   });
 }
 
-export async function getGovernorateCommittees(governorateId: string) {
-  return request<CommitteeOption[]>({ method: 'GET', url: `/api/governorates/${governorateId}/committees` });
+export async function getGovernorateCommittees(governorateId: string, kind: 'default' | 'club' | 'all' = 'default') {
+  const params = new URLSearchParams();
+
+  if (kind === 'club') {
+    params.set('kind', 'club');
+  } else if (kind === 'all') {
+    params.set('kind', 'all');
+  }
+
+  const query = params.toString();
+  const url = `/api/governorates/${governorateId}/committees${query ? `?${query}` : ''}`;
+
+  return request<CommitteeOption[]>({ method: 'GET', url });
 }
 
-export async function createCommittee(governorateId: string, form: CommitteeCreateFormState) {
-  return request<CommitteeOption>({ method: 'POST', url: `/api/governorates/${governorateId}/committees`, data: form });
+export async function createCommittee(governorateId: string, form: CommitteeCreateFormState, isStudentClub = false) {
+  return request<CommitteeOption>({
+    method: 'POST',
+    url: `/api/governorates/${governorateId}/committees`,
+    data: { ...form, isStudentClub }
+  });
 }
 
 export async function deleteCommittee(governorateId: string, committeeId: string) {

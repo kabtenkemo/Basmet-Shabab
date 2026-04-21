@@ -488,10 +488,16 @@ BEGIN
         Id uniqueidentifier NOT NULL CONSTRAINT PK_Committees PRIMARY KEY,
         GovernorateId uniqueidentifier NOT NULL,
         Name nvarchar(120) NOT NULL,
+        IsStudentClub bit NOT NULL CONSTRAINT DF_Committees_IsStudentClub DEFAULT 0,
         IsVisibleInJoinForm bit NOT NULL CONSTRAINT DF_Committees_IsVisibleInJoinForm DEFAULT 1,
         CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_Committees_CreatedAtUtc DEFAULT SYSUTCDATETIME(),
         CONSTRAINT FK_Committees_Governorates_GovernorateId FOREIGN KEY (GovernorateId) REFERENCES dbo.Governorates (Id) ON DELETE CASCADE
     );
+END;
+
+IF COL_LENGTH('dbo.Committees', 'IsStudentClub') IS NULL
+BEGIN
+    ALTER TABLE dbo.Committees ADD IsStudentClub bit NOT NULL CONSTRAINT DF_Committees_IsStudentClub DEFAULT 0;
 END;
 
 IF COL_LENGTH('dbo.Governorates', 'IsVisibleInJoinForm') IS NULL
@@ -503,6 +509,16 @@ IF COL_LENGTH('dbo.Committees', 'IsVisibleInJoinForm') IS NULL
 BEGIN
     ALTER TABLE dbo.Committees ADD IsVisibleInJoinForm bit NOT NULL CONSTRAINT DF_Committees_IsVisibleInJoinForm DEFAULT 1;
 END;
+
+UPDATE dbo.Committees
+SET IsStudentClub = 1
+WHERE IsStudentClub = 0
+    AND (
+            LOWER(Name) LIKE '%club%'
+            OR Name LIKE N'%نادي%'
+            OR Name LIKE N'%النوادي%'
+            OR Name LIKE N'%طلابي%'
+    );
 
 IF COL_LENGTH('dbo.Members', 'GovernorateId') IS NULL ALTER TABLE dbo.Members ADD GovernorateId uniqueidentifier NULL;
 IF COL_LENGTH('dbo.Members', 'CommitteeId') IS NULL ALTER TABLE dbo.Members ADD CommitteeId uniqueidentifier NULL;

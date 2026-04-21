@@ -10,6 +10,8 @@ public sealed class Committee
 
     public string Name { get; set; } = string.Empty;
 
+    public bool IsStudentClub { get; set; }
+
     public bool IsVisibleInJoinForm { get; set; } = true;
 
     public DateTime CreatedAtUtc { get; set; } = DateTime.UtcNow;

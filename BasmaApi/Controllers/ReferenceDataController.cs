@@ -75,11 +75,20 @@ public sealed class ReferenceDataController : ControllerBase
 
     [AllowAnonymous]
     [HttpGet("{governorateId:guid}/committees")]
-    public async Task<ActionResult<IEnumerable<CommitteeResponse>>> GetCommittees(Guid governorateId, CancellationToken cancellationToken)
+    public async Task<ActionResult<IEnumerable<CommitteeResponse>>> GetCommittees(Guid governorateId, [FromQuery] string? kind, CancellationToken cancellationToken)
     {
+        var normalizedKind = kind?.Trim().ToLowerInvariant();
+
         var committeesQuery = _dbContext.Committees
             .AsNoTracking()
             .Where(committee => committee.GovernorateId == governorateId);
+
+        committeesQuery = normalizedKind switch
+        {
+            "club" => committeesQuery.Where(committee => committee.IsStudentClub),
+            "all" => committeesQuery,
+            _ => committeesQuery.Where(committee => !committee.IsStudentClub)
+        };
 
         if (User.Identity?.IsAuthenticated != true)
         {
@@ -93,6 +102,7 @@ public sealed class ReferenceDataController : ControllerBase
                 committee.GovernorateId,
                 committee.Governorate.Name,
                 committee.Name,
+                committee.IsStudentClub,
                 committee.IsVisibleInJoinForm,
                 committee.CreatedAtUtc))
             .ToListAsync(cancellationToken);
@@ -198,6 +208,7 @@ public sealed class ReferenceDataController : ControllerBase
             committee.GovernorateId,
             committee.Governorate.Name,
             committee.Name,
+            committee.IsStudentClub,
             committee.IsVisibleInJoinForm,
             committee.CreatedAtUtc));
     }
@@ -237,7 +248,8 @@ public sealed class ReferenceDataController : ControllerBase
         var committee = new Committee
         {
             GovernorateId = governorate.Id,
-            Name = committeeName
+            Name = committeeName,
+            IsStudentClub = request.IsStudentClub
         };
 
         _dbContext.Committees.Add(committee);
@@ -248,6 +260,7 @@ public sealed class ReferenceDataController : ControllerBase
             committee.GovernorateId,
             governorate.Name,
             committee.Name,
+            committee.IsStudentClub,
             committee.IsVisibleInJoinForm,
             committee.CreatedAtUtc));
     }

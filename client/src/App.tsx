@@ -707,6 +707,7 @@ function LoginView({ onNavigateToJoin }: { onNavigateToJoin: () => void }) {
 function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
   const { submitJoinRequest } = useApp();
   const [joinForm, setJoinForm] = useState<TeamJoinRequestCreateState>(emptyJoinRequest);
+  const [joinGovernorateOnly, setJoinGovernorateOnly] = useState(false);
   const [joinGovernorates, setJoinGovernorates] = useState<GovernorateOption[]>([]);
   const [joinCommittees, setJoinCommittees] = useState<CommitteeOption[]>([]);
   const [joinLoading, setJoinLoading] = useState(false);
@@ -750,13 +751,13 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     let cancelled = false;
 
     const loadCommittees = async () => {
-      if (!joinForm.governorateId) {
+      if (!joinForm.governorateId || joinGovernorateOnly) {
         setJoinCommittees([]);
         return;
       }
 
       try {
-        const data = await getGovernorateCommittees(joinForm.governorateId);
+        const data = await getGovernorateCommittees(joinForm.governorateId, 'default');
         if (!cancelled) {
           setJoinCommittees(data);
         }
@@ -772,7 +773,7 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     return () => {
       cancelled = true;
     };
-  }, [joinForm.governorateId]);
+  }, [joinForm.governorateId, joinGovernorateOnly]);
 
   const submitJoin = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -780,8 +781,13 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
     setJoinSuccess('');
     const normalizedNationalId = joinForm.nationalId.replace(/\s+/g, '');
 
-    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.committeeId || !joinForm.motivation.trim() || !normalizedNationalId) {
-      setJoinError('املأ الاسم والبريد والهاتف والرقم القومي والمحافظة واللجنة وسبب الانضمام قبل الإرسال.');
+    if (!joinForm.fullName.trim() || !joinForm.email.trim() || !joinForm.phoneNumber.trim() || !joinForm.governorateId || !joinForm.motivation.trim() || !normalizedNationalId) {
+      setJoinError('املأ الاسم والبريد والهاتف والرقم القومي والمحافظة وسبب الانضمام قبل الإرسال.');
+      return;
+    }
+
+    if (!joinGovernorateOnly && !joinForm.committeeId) {
+      setJoinError('اختر لجنة عند التقديم على مستوى اللجنة.');
       return;
     }
 
@@ -792,9 +798,10 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
 
     setJoinLoading(true);
     try {
-      const created = await submitJoinRequest(joinForm);
+      const created = await submitJoinRequest(joinGovernorateOnly ? { ...joinForm, committeeId: '' } : joinForm);
       setJoinSuccess(`تم إرسال طلبك إلى منسق محافظة ${created.governorateName}${created.assignedToMemberName ? ` (${created.assignedToMemberName})` : ''}.`);
       setJoinForm(emptyJoinRequest);
+      setJoinGovernorateOnly(false);
       setJoinCommittees([]);
     } catch (joinSubmitError) {
       setJoinError(joinSubmitError instanceof Error ? joinSubmitError.message : 'تعذر إرسال الطلب حاليًا.');
@@ -826,7 +833,7 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
                 <Input value={joinForm.phoneNumber} onChange={(event) => setJoinForm((current) => ({ ...current, phoneNumber: event.target.value }))} inputMode="tel" placeholder="01xxxxxxxxx" disabled={joinLoading} required />
               </Field>
             </div>
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-4 sm:grid-cols-3">
               <Field label="المحافظة">
                 <Select
                   value={joinForm.governorateId}
@@ -838,14 +845,30 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
                   {joinGovernorates.map((governorate) => <option key={governorate.governorateId} value={governorate.governorateId}>{governorate.name}</option>)}
                 </Select>
               </Field>
+              <Field label="نوع التقديم">
+                <Select
+                  value={joinGovernorateOnly ? 'governorate' : 'committee'}
+                  onChange={(event) => {
+                    const isGovernorateOnly = event.target.value === 'governorate';
+                    setJoinGovernorateOnly(isGovernorateOnly);
+                    if (isGovernorateOnly) {
+                      setJoinForm((current) => ({ ...current, committeeId: '' }));
+                    }
+                  }}
+                  disabled={joinLoading || !joinForm.governorateId}
+                >
+                  <option value="committee">تقديم على لجنة</option>
+                  <option value="governorate">تقديم محافظة فقط</option>
+                </Select>
+              </Field>
               <Field label="اللجنة">
                 <Select
                   value={joinForm.committeeId}
                   onChange={(event) => setJoinForm((current) => ({ ...current, committeeId: event.target.value }))}
-                  disabled={joinLoading || !joinForm.governorateId}
-                  required
+                  disabled={joinLoading || !joinForm.governorateId || joinGovernorateOnly}
+                  required={!joinGovernorateOnly}
                 >
-                  <option value="">اختر لجنة</option>
+                  <option value="">{joinGovernorateOnly ? 'غير مطلوب عند تقديم المحافظة فقط' : 'اختر لجنة'}</option>
                   {joinCommittees.map((committee) => <option key={committee.committeeId} value={committee.committeeId}>{committee.name}</option>)}
                 </Select>
               </Field>
@@ -2787,15 +2810,14 @@ function StudentClubsPage() {
     const loadCommittees = async () => {
       setScopeLoading(true);
       try {
-        const result = await getGovernorateCommittees(clubMemberForm.governorateId);
+        const result = await getGovernorateCommittees(clubMemberForm.governorateId, 'club');
         if (cancelled) {
           return;
         }
 
-        const clubOnlyCommittees = result.filter((committee) => isClubCommitteeName(committee.name));
         const scopedCommittees = user?.role === 'GovernorCommitteeCoordinator' && user.committeeName
-          ? clubOnlyCommittees.filter((committee) => isSameScopeName(committee.name, user.committeeName))
-          : clubOnlyCommittees;
+          ? result.filter((committee) => isSameScopeName(committee.name, user.committeeName))
+          : result;
 
         setCommittees(scopedCommittees);
         if (user?.role === 'GovernorCommitteeCoordinator' && user.committeeName) {
@@ -2842,15 +2864,14 @@ function StudentClubsPage() {
     let cancelled = false;
     const loadClubCommittees = async () => {
       try {
-        const result = await getGovernorateCommittees(selectedClubGovernorateId);
+        const result = await getGovernorateCommittees(selectedClubGovernorateId, 'club');
         if (cancelled) {
           return;
         }
 
-        const clubOnlyCommittees = result.filter((committee) => isClubCommitteeName(committee.name));
         const scopedCommittees = user?.role === 'GovernorCommitteeCoordinator' && user.committeeName
-          ? clubOnlyCommittees.filter((committee) => isSameScopeName(committee.name, user.committeeName))
-          : clubOnlyCommittees;
+          ? result.filter((committee) => isSameScopeName(committee.name, user.committeeName))
+          : result;
 
         setClubCommittees(scopedCommittees);
       } catch {
@@ -2905,13 +2926,12 @@ function StudentClubsPage() {
     try {
       const trimmedName = clubForm.name.trim();
       const normalizedClubName = isClubCommitteeName(trimmedName) ? trimmedName : `نادي ${trimmedName}`;
-      await createCommittee(clubGovernorateId, { name: normalizedClubName });
+      await createCommittee(clubGovernorateId, { name: normalizedClubName }, true);
       addActivity('إنشاء نادي طلابي', `تم إنشاء نادي ${normalizedClubName}.`, 'success');
 
       if (canManageClubJoinVisibility && selectedClubGovernorateId && selectedClubGovernorateId === clubGovernorateId) {
-        const refreshedCommittees = await getGovernorateCommittees(selectedClubGovernorateId);
-        const clubOnlyCommittees = refreshedCommittees.filter((committee) => isClubCommitteeName(committee.name));
-        setClubCommittees(clubOnlyCommittees);
+        const refreshedCommittees = await getGovernorateCommittees(selectedClubGovernorateId, 'club');
+        setClubCommittees(refreshedCommittees);
       }
 
       setCreateClubOpen(false);

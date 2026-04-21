@@ -236,6 +236,7 @@ public sealed class AppDbContext : DbContext
         {
             entity.HasIndex(committee => new { committee.GovernorateId, committee.Name }).IsUnique();
             entity.Property(committee => committee.Name).HasMaxLength(120);
+            entity.Property(committee => committee.IsStudentClub).HasDefaultValue(false);
             entity.Property(committee => committee.IsVisibleInJoinForm).HasDefaultValue(true);
             entity.Property(committee => committee.CreatedAtUtc).HasColumnName("CreatedAtUtc");
 

@@ -101,6 +101,11 @@ public sealed class JoinRequestsController : ControllerBase
             {
                 return BadRequest(new { message = "التقديم على هذه اللجنة متوقف حاليًا. اختر لجنة أخرى." });
             }
+
+            if (committee.IsStudentClub)
+            {
+                return BadRequest(new { message = "التقديم على النوادي الطلابية غير متاح من فورم المحافظات." });
+            }
         }
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();

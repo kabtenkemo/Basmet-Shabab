@@ -262,6 +262,7 @@ export type CommitteeOption = {
   governorateId: string;
   governorateName: string;
   name: string;
+  isStudentClub: boolean;
   isVisibleInJoinForm: boolean;
   createdAtUtc: string;
 };
