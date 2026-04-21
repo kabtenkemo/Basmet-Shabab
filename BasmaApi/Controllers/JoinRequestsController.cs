@@ -125,8 +125,21 @@ public sealed class JoinRequestsController : ControllerBase
 
         if (committee is null)
         {
-            return BadRequest(new { message = "اللجنة المختارة لا تتبع المحافظة المحددة." });
+            var selectedGovernorateName = governorate.Name.Trim();
+            committee = await _dbContext.Committees
+                .AsNoTracking()
+                .Include(item => item.Governorate)
+                .FirstOrDefaultAsync(item => item.Id == request.CommitteeId.Value
+                    && item.Governorate != null
+                    && item.Governorate.Name.ToLower() == selectedGovernorateName.ToLower(), cancellationToken);
+
+            if (committee is null)
+            {
+                return BadRequest(new { message = "اللجنة المختارة لا تتبع المحافظة المحددة." });
+            }
         }
+
+        var effectiveGovernorateId = committee.GovernorateId;
 
         if (!committee.IsVisibleInJoinForm)
         {
@@ -145,7 +158,7 @@ public sealed class JoinRequestsController : ControllerBase
 
         var normalizedEmail = request.Email.Trim().ToLowerInvariant();
         var duplicatePendingRequest = await _dbContext.TeamJoinRequests.AnyAsync(
-            item => item.Email == normalizedEmail && item.GovernorateId == request.GovernorateId && item.Status == JoinRequestStatus.Pending,
+            item => item.Email == normalizedEmail && item.GovernorateId == effectiveGovernorateId && item.Status == JoinRequestStatus.Pending,
             cancellationToken);
 
         if (duplicatePendingRequest)
@@ -154,7 +167,7 @@ public sealed class JoinRequestsController : ControllerBase
         }
 
         var duplicateNationalIdPendingRequest = await _dbContext.TeamJoinRequests.AnyAsync(
-            item => item.NationalId == nationalId && item.GovernorateId == request.GovernorateId && item.Status == JoinRequestStatus.Pending,
+            item => item.NationalId == nationalId && item.GovernorateId == effectiveGovernorateId && item.Status == JoinRequestStatus.Pending,
             cancellationToken);
 
         if (duplicateNationalIdPendingRequest)
@@ -164,7 +177,7 @@ public sealed class JoinRequestsController : ControllerBase
 
         var assignedCoordinator = await _dbContext.Members
             .AsNoTracking()
-            .Where(member => member.Role == MemberRole.GovernorCoordinator && member.GovernorateId == request.GovernorateId)
+            .Where(member => member.Role == MemberRole.GovernorCoordinator && member.GovernorateId == effectiveGovernorateId)
             .OrderBy(member => member.CreatedAtUtc)
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -175,7 +188,7 @@ public sealed class JoinRequestsController : ControllerBase
             PhoneNumber = request.PhoneNumber.Trim(),
             NationalId = nationalId,
             BirthDate = request.BirthDate,
-            GovernorateId = governorate.Id,
+            GovernorateId = effectiveGovernorateId,
             CommitteeId = committee?.Id,
             Motivation = request.Motivation.Trim(),
             Experience = string.IsNullOrWhiteSpace(request.Experience) ? null : request.Experience.Trim(),

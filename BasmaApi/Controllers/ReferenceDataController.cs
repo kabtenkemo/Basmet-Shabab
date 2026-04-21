@@ -93,7 +93,17 @@ SELECT
     c.CreatedAtUtc
 FROM dbo.Committees AS c
 LEFT JOIN dbo.Governorates AS g ON g.Id = c.GovernorateId
-WHERE c.GovernorateId = @GovernorateId";
+WHERE
+    c.GovernorateId = @GovernorateId
+    OR (
+        NOT EXISTS (SELECT 1 FROM dbo.Committees WHERE GovernorateId = @GovernorateId)
+        AND EXISTS (
+            SELECT 1
+            FROM dbo.Governorates AS selectedGovernorate
+            WHERE selectedGovernorate.Id = @GovernorateId
+              AND LOWER(selectedGovernorate.Name) = LOWER(COALESCE(g.Name, N''))
+        )
+    )";
 
             if (normalizedKind == "club")
             {
