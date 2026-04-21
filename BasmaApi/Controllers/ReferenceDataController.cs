@@ -2,6 +2,7 @@ using BasmaApi.Contracts;
 using BasmaApi.Data;
 using BasmaApi.Models;
 using BasmaApi.Services;
+using Microsoft.Data.SqlClient;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -78,32 +79,72 @@ public sealed class ReferenceDataController : ControllerBase
     public async Task<ActionResult<IEnumerable<CommitteeResponse>>> GetCommittees(Guid governorateId, [FromQuery] string? kind, CancellationToken cancellationToken)
     {
         var normalizedKind = kind?.Trim().ToLowerInvariant();
-        async Task<Dictionary<Guid, string>> LoadGovernorateNamesAsync()
+
+        async Task<List<CommitteeResponse>> LoadCommitteesAsync()
         {
-            return await _dbContext.Governorates
-                .AsNoTracking()
-                .ToDictionaryAsync(governorate => governorate.Id, governorate => governorate.Name, cancellationToken);
+            var sql = @"
+SELECT
+    c.Id,
+    c.GovernorateId,
+    COALESCE(g.Name, N'غير محددة') AS GovernorateName,
+    c.Name,
+    c.IsStudentClub,
+    c.IsVisibleInJoinForm,
+    c.CreatedAtUtc
+FROM dbo.Committees AS c
+LEFT JOIN dbo.Governorates AS g ON g.Id = c.GovernorateId
+WHERE c.GovernorateId = @GovernorateId";
+
+            if (normalizedKind == "club")
+            {
+                sql += @" AND c.IsStudentClub = 1";
+            }
+            else if (normalizedKind != "all")
+            {
+                sql += @" AND c.IsStudentClub = 0";
+            }
+
+            if (User.Identity?.IsAuthenticated != true)
+            {
+                sql += @" AND c.IsVisibleInJoinForm = 1";
+            }
+
+            sql += @" ORDER BY c.Name";
+
+            var connection = _dbContext.Database.GetDbConnection();
+            await using var command = connection.CreateCommand();
+            command.CommandText = sql;
+            var parameter = command.CreateParameter();
+            parameter.ParameterName = "@GovernorateId";
+            parameter.Value = governorateId;
+            command.Parameters.Add(parameter);
+
+            if (connection.State != System.Data.ConnectionState.Open)
+            {
+                await connection.OpenAsync(cancellationToken);
+            }
+
+            await using var reader = await command.ExecuteReaderAsync(cancellationToken);
+            var results = new List<CommitteeResponse>();
+
+            while (await reader.ReadAsync(cancellationToken))
+            {
+                results.Add(new CommitteeResponse(
+                    reader.GetGuid(0),
+                    reader.GetGuid(1),
+                    reader.GetString(2),
+                    reader.GetString(3),
+                    reader.GetBoolean(4),
+                    reader.GetBoolean(5),
+                    reader.GetDateTime(6)));
+            }
+
+            return results;
         }
 
-        async Task<List<(Guid Id, Guid GovernorateId, string Name, bool IsStudentClub, bool IsVisibleInJoinForm, DateTime CreatedAtUtc)>> LoadCommitteesAsync()
-        {
-            return await _dbContext.Committees
-                .AsNoTracking()
-                .Where(committee => committee.GovernorateId == governorateId)
-                .Select(committee => new ValueTuple<Guid, Guid, string, bool, bool, DateTime>(
-                    committee.Id,
-                    committee.GovernorateId,
-                    committee.Name,
-                    committee.IsStudentClub,
-                    committee.IsVisibleInJoinForm,
-                    committee.CreatedAtUtc))
-                .ToListAsync(cancellationToken);
-        }
-
-        List<(Guid Id, Guid GovernorateId, string Name, bool IsStudentClub, bool IsVisibleInJoinForm, DateTime CreatedAtUtc)> committees;
         try
         {
-            committees = await LoadCommitteesAsync();
+            return Ok(await LoadCommitteesAsync());
         }
         catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
         {
@@ -111,65 +152,14 @@ public sealed class ReferenceDataController : ControllerBase
             try
             {
                 DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
-                committees = await LoadCommitteesAsync();
+                return Ok(await LoadCommitteesAsync());
             }
             catch (Exception repairEx)
             {
                 _logger.LogError(repairEx, "Schema repair for committee list failed. Returning empty list to avoid request failure.");
-                committees = [];
+                return Ok(Array.Empty<CommitteeResponse>());
             }
         }
-
-        if (committees.Count == 0)
-        {
-            return Ok(Array.Empty<CommitteeResponse>());
-        }
-
-        Dictionary<Guid, string> governorateNames;
-        try
-        {
-            governorateNames = await LoadGovernorateNamesAsync();
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Governorate name lookup failed for committee list. Names will be omitted.");
-            governorateNames = [];
-        }
-
-        var filteredCommittees = normalizedKind switch
-        {
-            "club" => committees.Where(item => item.IsStudentClub),
-            "all" => committees,
-            _ => committees.Where(item => !item.IsStudentClub)
-        };
-
-        if (User.Identity?.IsAuthenticated != true)
-        {
-            filteredCommittees = filteredCommittees.Where(item => item.IsVisibleInJoinForm);
-        }
-
-        var responses = filteredCommittees
-            .OrderBy(item => item.Name)
-            .Select(item => new CommitteeResponse(
-                item.Id,
-                item.GovernorateId,
-                governorateNames.TryGetValue(item.GovernorateId, out var governorateName) ? governorateName : "غير محددة",
-                item.Name,
-                item.IsStudentClub,
-                item.IsVisibleInJoinForm,
-                item.CreatedAtUtc))
-            .ToList();
-
-        var missingGovernorates = responses.Count(item => string.IsNullOrWhiteSpace(item.GovernorateName) || item.GovernorateName == "غير محددة");
-        if (missingGovernorates > 0)
-        {
-            _logger.LogWarning(
-                "Committee list for governorate {GovernorateId} returned {MissingGovernorates} items with missing governorate data.",
-                governorateId,
-                missingGovernorates);
-        }
-
-        return Ok(responses);
     }
 
     [HttpPatch("{governorateId:guid}/join-visibility")]
