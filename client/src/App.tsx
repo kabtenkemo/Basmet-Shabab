@@ -324,6 +324,18 @@ function isSameScopeName(left: string | null | undefined, right: string | null |
   return normalizeScopeName(left) === normalizeScopeName(right);
 }
 
+function isClubCommitteeName(value: string | null | undefined) {
+  const normalized = normalizeScopeName(value);
+  if (!normalized) {
+    return false;
+  }
+
+  return normalized.includes('club')
+    || normalized.includes('نادي')
+    || normalized.includes('النوادي')
+    || normalized.includes('طلابي');
+}
+
 function hasAtLeastTwoNameParts(value: string) {
   return value.trim().split(/\s+/).filter(Boolean).length >= 2;
 }
@@ -2621,12 +2633,17 @@ function StudentClubsPage() {
   const [clubMemberForm, setClubMemberForm] = useState<MemberCreateFormState>({ ...emptyMember, role: 'CommitteeMember' });
   const [clubMemberFormError, setClubMemberFormError] = useState('');
   const [clubGovernorateId, setClubGovernorateId] = useState('');
+  const [selectedClubGovernorateId, setSelectedClubGovernorateId] = useState('');
   const [governorates, setGovernorates] = useState<GovernorateOption[]>([]);
   const [committees, setCommittees] = useState<CommitteeOption[]>([]);
+  const [clubCommittees, setClubCommittees] = useState<CommitteeOption[]>([]);
+  const [updatingClubCommitteeVisibilityId, setUpdatingClubCommitteeVisibilityId] = useState<string | null>(null);
   const [scopeLoading, setScopeLoading] = useState(false);
 
   const clubRoles: Role[] = ['GovernorCoordinator', 'GovernorCommitteeCoordinator', 'CommitteeMember'];
   const canCreateClub = user?.role === 'President' || user?.role === 'VicePresident' || user?.role === 'GovernorCoordinator';
+  const canManageClubJoinVisibility = Boolean(user?.permissions.some((permission) => permission.toLowerCase() === 'joinrequests.visibility.manage'))
+    || user?.role === 'GovernorCommitteeCoordinator';
   const allowedClubCreateRoles = useMemo<Role[]>(() => {
     if (!canCreateMembers || !user) {
       return [];
@@ -2644,6 +2661,15 @@ function StudentClubsPage() {
   }, [canCreateMembers, user]);
 
   const canCreateClubMember = allowedClubCreateRoles.length > 0;
+  const clubGovernoratesWithCommittees = useMemo(() => {
+    return new Set(
+      members
+        .filter((member) => isClubCommitteeName(member.committeeName))
+        .map((member) => normalizeScopeName(member.governorName))
+        .filter((name) => name.length > 0)
+    );
+  }, [members]);
+
   const visibleGovernorates = useMemo(() => {
     if ((user?.role === 'GovernorCoordinator' || user?.role === 'GovernorCommitteeCoordinator') && user.governorName) {
       return governorates.filter((governorate) => isSameScopeName(governorate.name, user.governorName));
@@ -2655,7 +2681,17 @@ function StudentClubsPage() {
   const clubMembers = useMemo(() => {
     const normalized = search.trim().toLowerCase();
 
-    let scopedMembers = members.filter((member) => clubRoles.includes(member.role));
+    let scopedMembers = members.filter((member) => {
+      if (!clubRoles.includes(member.role)) {
+        return false;
+      }
+
+      if (member.role === 'GovernorCoordinator') {
+        return clubGovernoratesWithCommittees.has(normalizeScopeName(member.governorName));
+      }
+
+      return isClubCommitteeName(member.committeeName);
+    });
 
     if (user?.role === 'GovernorCoordinator' && user.governorName) {
       scopedMembers = scopedMembers.filter((member) => isSameScopeName(member.governorName, user.governorName));
@@ -2678,7 +2714,7 @@ function StudentClubsPage() {
       member.committeeName ?? '',
       clubRoleLabel(member.role)
     ].join(' ').toLowerCase().includes(normalized));
-  }, [members, search, user?.committeeName, user?.governorName, user?.role]);
+  }, [clubGovernoratesWithCommittees, members, search, user?.committeeName, user?.governorName, user?.role]);
 
   const roleStats = useMemo(() => {
     return {
@@ -2689,7 +2725,7 @@ function StudentClubsPage() {
   }, [clubMembers]);
 
   useEffect(() => {
-    if (!createClubOpen && !createClubMemberOpen) {
+    if (!createClubOpen && !createClubMemberOpen && !canManageClubJoinVisibility) {
       return;
     }
 
@@ -2719,6 +2755,10 @@ function StudentClubsPage() {
             governorateId: current.governorateId || scopedGovernorates[0]?.governorateId || ''
           }));
         }
+
+        if (canManageClubJoinVisibility) {
+          setSelectedClubGovernorateId((current) => current || scopedGovernorates[0]?.governorateId || '');
+        }
       } catch {
         if (!cancelled) {
           setGovernorates([]);
@@ -2735,7 +2775,7 @@ function StudentClubsPage() {
     return () => {
       cancelled = true;
     };
-  }, [allowedClubCreateRoles, createClubMemberOpen, createClubOpen, user?.governorName, user?.role]);
+  }, [allowedClubCreateRoles, canManageClubJoinVisibility, createClubMemberOpen, createClubOpen, user?.governorName, user?.role]);
 
   useEffect(() => {
     if (!createClubMemberOpen || !clubMemberForm.governorateId || !roleNeedsCommittee(clubMemberForm.role)) {
@@ -2752,9 +2792,14 @@ function StudentClubsPage() {
           return;
         }
 
-        setCommittees(result);
+        const clubOnlyCommittees = result.filter((committee) => isClubCommitteeName(committee.name));
+        const scopedCommittees = user?.role === 'GovernorCommitteeCoordinator' && user.committeeName
+          ? clubOnlyCommittees.filter((committee) => isSameScopeName(committee.name, user.committeeName))
+          : clubOnlyCommittees;
+
+        setCommittees(scopedCommittees);
         if (user?.role === 'GovernorCommitteeCoordinator' && user.committeeName) {
-          const scopedCommittee = result.find((committee) => isSameScopeName(committee.name, user.committeeName));
+          const scopedCommittee = scopedCommittees.find((committee) => isSameScopeName(committee.name, user.committeeName));
           setClubMemberForm((current) => ({
             ...current,
             committeeId: current.committeeId || scopedCommittee?.committeeId || ''
@@ -2787,6 +2832,40 @@ function StudentClubsPage() {
       setClubMemberForm((current) => ({ ...current, committeeId: '' }));
     }
   }, [clubMemberForm.committeeId, clubMemberForm.role, createClubMemberOpen]);
+
+  useEffect(() => {
+    if (!canManageClubJoinVisibility || !selectedClubGovernorateId) {
+      setClubCommittees([]);
+      return;
+    }
+
+    let cancelled = false;
+    const loadClubCommittees = async () => {
+      try {
+        const result = await getGovernorateCommittees(selectedClubGovernorateId);
+        if (cancelled) {
+          return;
+        }
+
+        const clubOnlyCommittees = result.filter((committee) => isClubCommitteeName(committee.name));
+        const scopedCommittees = user?.role === 'GovernorCommitteeCoordinator' && user.committeeName
+          ? clubOnlyCommittees.filter((committee) => isSameScopeName(committee.name, user.committeeName))
+          : clubOnlyCommittees;
+
+        setClubCommittees(scopedCommittees);
+      } catch {
+        if (!cancelled) {
+          setClubCommittees([]);
+        }
+      }
+    };
+
+    void loadClubCommittees();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [canManageClubJoinVisibility, selectedClubGovernorateId, user?.committeeName, user?.role]);
 
   const openCreateClubModal = () => {
     setClubForm(emptyCommittee);
@@ -2825,13 +2904,56 @@ function StudentClubsPage() {
 
     try {
       const trimmedName = clubForm.name.trim();
-      await createCommittee(clubGovernorateId, { name: trimmedName });
-      addActivity('إنشاء نادي طلابي', `تم إنشاء نادي ${trimmedName}.`, 'success');
+      const normalizedClubName = isClubCommitteeName(trimmedName) ? trimmedName : `نادي ${trimmedName}`;
+      await createCommittee(clubGovernorateId, { name: normalizedClubName });
+      addActivity('إنشاء نادي طلابي', `تم إنشاء نادي ${normalizedClubName}.`, 'success');
+
+      if (canManageClubJoinVisibility && selectedClubGovernorateId && selectedClubGovernorateId === clubGovernorateId) {
+        const refreshedCommittees = await getGovernorateCommittees(selectedClubGovernorateId);
+        const clubOnlyCommittees = refreshedCommittees.filter((committee) => isClubCommitteeName(committee.name));
+        setClubCommittees(clubOnlyCommittees);
+      }
+
       setCreateClubOpen(false);
       setClubForm(emptyCommittee);
       setClubFormError('');
     } catch (error) {
       setClubFormError(error instanceof Error ? error.message : 'تعذر إنشاء النادي الطلابي.');
+    }
+  };
+
+  const toggleClubFormVisibility = async (committee: CommitteeOption) => {
+    if (!canManageClubJoinVisibility) {
+      return;
+    }
+
+    setUpdatingClubCommitteeVisibilityId(committee.committeeId);
+    try {
+      const updatedCommittee = await updateCommitteeJoinVisibility(
+        committee.governorateId,
+        committee.committeeId,
+        !committee.isVisibleInJoinForm
+      );
+
+      setClubCommittees((current) =>
+        current.map((item) => item.committeeId === updatedCommittee.committeeId ? updatedCommittee : item)
+      );
+
+      setCommittees((current) =>
+        current.map((item) => item.committeeId === updatedCommittee.committeeId ? updatedCommittee : item)
+      );
+
+      if (addActivity) {
+        addActivity(
+          'فورم نادي طلابي',
+          `تم ${updatedCommittee.isVisibleInJoinForm ? 'فتح' : 'إغلاق'} فورم التقديم على ${updatedCommittee.name}.`,
+          updatedCommittee.isVisibleInJoinForm ? 'success' : 'warning'
+        );
+      }
+    } catch (error) {
+      window.alert(error instanceof Error ? error.message : 'تعذر تحديث حالة الفورم حاليًا.');
+    } finally {
+      setUpdatingClubCommitteeVisibilityId(null);
     }
   };
 
@@ -2930,9 +3052,56 @@ function StudentClubsPage() {
         <StatCard label="عضو لجنة Club" value={roleStats.committeeMembers} accent="success" />
       </div>
 
+      {canManageClubJoinVisibility && (
+        <Card title="فورم التقديم للـClub" subtitle="Club form visibility">
+          <div className="space-y-4">
+            <Field label="المحافظة">
+              <Select
+                value={selectedClubGovernorateId}
+                onChange={(event) => setSelectedClubGovernorateId(event.target.value)}
+                disabled={scopeLoading || user?.role === 'GovernorCommitteeCoordinator' || visibleGovernorates.length <= 1}
+              >
+                <option value="">اختر المحافظة</option>
+                {visibleGovernorates.map((governorate) => <option key={governorate.governorateId} value={governorate.governorateId}>{governorate.name}</option>)}
+              </Select>
+            </Field>
+
+            {clubCommittees.length === 0 ? (
+              <EmptyState title="لا توجد لجان Club" description="أنشئ نادي طلابي أولاً أو اختر محافظة تحتوي على لجان Club." />
+            ) : (
+              <div className="space-y-3">
+                {clubCommittees.map((committee) => (
+                  <div key={committee.committeeId} className="rounded-2xl border border-white/10 bg-white/5 p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="font-bold text-white">{committee.name}</p>
+                        <p className="mt-1 text-xs text-slate-300">{committee.isVisibleInJoinForm ? 'الفورم مفتوح على هذا النادي' : 'الفورم مغلق على هذا النادي'}</p>
+                      </div>
+                      <Button
+                        variant={committee.isVisibleInJoinForm ? 'ghost' : 'secondary'}
+                        onClick={() => void toggleClubFormVisibility(committee)}
+                        disabled={updatingClubCommitteeVisibilityId === committee.committeeId}
+                      >
+                        <span className="inline-flex items-center gap-2">
+                          {updatingClubCommitteeVisibilityId === committee.committeeId
+                            ? 'جارٍ التحديث...'
+                            : committee.isVisibleInJoinForm
+                              ? 'إغلاق الفورم'
+                              : 'فتح الفورم'}
+                        </span>
+                      </Button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </Card>
+      )}
+
       <Card title="أعضاء النوادي الطلابية" subtitle="Club roster" actions={<Badge tone="neutral">{clubMembers.length} عضو</Badge>}>
         {clubMembers.length === 0 ? (
-          <EmptyState title="لا توجد بيانات نوادي طلابية" description="سيظهر هنا أعضاء النوادي الطلابية داخل نطاق صلاحياتك." />
+          <EmptyState title="لا توجد بيانات نوادي طلابية" description="سيظهر هنا أعضاء النوادي الطلابية المرتبطون بلجان Club فقط." />
         ) : (
           <div className="space-y-3">
             {clubMembers.map((member) => (
@@ -2977,6 +3146,7 @@ function StudentClubsPage() {
           </Field>
           <Field label="اسم النادي الطلابي">
             <Input value={clubForm.name} onChange={(event) => setClubForm((current) => ({ ...current, name: event.target.value }))} placeholder="مثال: نادي علوم الحاسب" />
+            <p className="mt-2 text-xs text-slate-400">إذا لم تبدأ التسمية بكلمة نادي، سيتم إضافتها تلقائيًا لحفظ تصنيف Club.</p>
           </Field>
         </form>
       </Modal>
@@ -3033,7 +3203,7 @@ function StudentClubsPage() {
                 onChange={(event) => setClubMemberForm((current) => ({ ...current, committeeId: event.target.value }))}
                 disabled={!clubMemberForm.governorateId || scopeLoading || (user?.role === 'GovernorCommitteeCoordinator' && committees.length <= 1)}
               >
-                <option value="">اختر اللجنة</option>
+                <option value="">اختر لجنة Club</option>
                 {committees.map((committee) => <option key={committee.committeeId} value={committee.committeeId}>{committee.name}</option>)}
               </Select>
             </Field>
