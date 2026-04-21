@@ -2692,6 +2692,7 @@ function StudentClubsPage() {
   }, [canCreateMembers, user]);
 
   const canCreateClubMember = allowedClubCreateRoles.length > 0;
+  const isClubCommittee = (committee: CommitteeOption) => committee.isStudentClub || isClubCommitteeName(committee.name);
   const clubGovernoratesWithCommittees = useMemo(() => {
     return new Set(
       members
@@ -2818,14 +2819,16 @@ function StudentClubsPage() {
     const loadCommittees = async () => {
       setScopeLoading(true);
       try {
-        const result = await getGovernorateCommittees(clubMemberForm.governorateId, 'club');
+        const result = await getGovernorateCommittees(clubMemberForm.governorateId, 'all');
         if (cancelled) {
           return;
         }
 
+        const clubOnlyCommittees = result.filter((committee) => isClubCommittee(committee));
+
         const scopedCommittees = user?.role === 'GovernorCommitteeCoordinator' && user.committeeName
-          ? result.filter((committee) => isSameScopeName(committee.name, user.committeeName))
-          : result;
+          ? clubOnlyCommittees.filter((committee) => isSameScopeName(committee.name, user.committeeName))
+          : clubOnlyCommittees;
 
         setCommittees(scopedCommittees);
         if (user?.role === 'GovernorCommitteeCoordinator' && user.committeeName) {
@@ -2872,14 +2875,16 @@ function StudentClubsPage() {
     let cancelled = false;
     const loadClubCommittees = async () => {
       try {
-        const result = await getGovernorateCommittees(selectedClubGovernorateId, 'club');
+        const result = await getGovernorateCommittees(selectedClubGovernorateId, 'all');
         if (cancelled) {
           return;
         }
 
+        const clubOnlyCommittees = result.filter((committee) => isClubCommittee(committee));
+
         const scopedCommittees = user?.role === 'GovernorCommitteeCoordinator' && user.committeeName
-          ? result.filter((committee) => isSameScopeName(committee.name, user.committeeName))
-          : result;
+          ? clubOnlyCommittees.filter((committee) => isSameScopeName(committee.name, user.committeeName))
+          : clubOnlyCommittees;
 
         setClubCommittees(scopedCommittees);
       } catch {
@@ -2938,8 +2943,8 @@ function StudentClubsPage() {
       addActivity('إنشاء نادي طلابي', `تم إنشاء نادي ${normalizedClubName}.`, 'success');
 
       if (canManageClubJoinVisibility && selectedClubGovernorateId && selectedClubGovernorateId === clubGovernorateId) {
-        const refreshedCommittees = await getGovernorateCommittees(selectedClubGovernorateId, 'club');
-        setClubCommittees(refreshedCommittees);
+        const refreshedCommittees = await getGovernorateCommittees(selectedClubGovernorateId, 'all');
+        setClubCommittees(refreshedCommittees.filter((committee) => isClubCommittee(committee)));
       }
 
       setCreateClubOpen(false);
