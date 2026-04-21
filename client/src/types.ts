@@ -102,6 +102,7 @@ export type MemberAdminItem = {
 
 export type TaskItem = {
   id: string;
+  createdByMemberId: string;
   title: string;
   description: string | null;
   audienceType: TaskAudienceType | string;

@@ -24,6 +24,7 @@ public sealed class TaskRequest
 
 public sealed record TaskResponse(
     Guid Id,
+    Guid CreatedByMemberId,
     string Title,
     string? Description,
     string AudienceType,

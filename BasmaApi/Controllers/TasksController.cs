@@ -327,6 +327,7 @@ public sealed class TasksController : ControllerBase
     {
         return new TaskResponse(
             task.Id,
+            task.MemberId,
             task.Title,
             task.Description,
             task.AudienceType.ToString(),

@@ -1903,17 +1903,21 @@ function TasksPage() {
       header: 'الإجراءات',
       render: (row) => (
         <div className="flex flex-wrap gap-2">
+          {row.createdByMemberId === user?.id && (
+            <Button variant="ghost" onClick={() => { setEditing(row); setTaskForm({ title: row.title, description: row.description ?? '', dueDate: row.dueDate?.slice(0, 10) ?? '', audienceType: (row.audienceType as TaskAudienceType) ?? 'All', targetRoles: row.targetRoles as Role[], targetMemberIds: row.targetMemberIds, isCompleted: row.isCompleted }); setTaskOpen(true); }}>
+              <span className="inline-flex items-center gap-2"><FiEdit3 /> تعديل</span>
+            </Button>
+          )}
           {!row.isCompleted && (
             <Button variant="secondary" onClick={() => void completeTaskItem(row.id)}>
               <span className="inline-flex items-center gap-2"><FiSave /> إتمام المهمة</span>
             </Button>
           )}
-          <Button variant="ghost" onClick={() => { setEditing(row); setTaskForm({ title: row.title, description: row.description ?? '', dueDate: row.dueDate?.slice(0, 10) ?? '', audienceType: (row.audienceType as TaskAudienceType) ?? 'All', targetRoles: row.targetRoles as Role[], targetMemberIds: row.targetMemberIds, isCompleted: row.isCompleted }); setTaskOpen(true); }}>
-            <span className="inline-flex items-center gap-2"><FiEdit3 /> تعديل</span>
-          </Button>
-          <Button variant="danger" onClick={() => void deleteTaskItem(row.id)}>
-            <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
-          </Button>
+          {row.createdByMemberId === user?.id && (
+            <Button variant="danger" onClick={() => void deleteTaskItem(row.id)}>
+              <span className="inline-flex items-center gap-2"><FiTrash2 /> حذف</span>
+            </Button>
+          )}
         </div>
       )
     }
