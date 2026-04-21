@@ -510,6 +510,11 @@ BEGIN
     ALTER TABLE dbo.Committees ADD IsVisibleInJoinForm bit NOT NULL CONSTRAINT DF_Committees_IsVisibleInJoinForm DEFAULT 1;
 END;
 
+IF COL_LENGTH('dbo.Committees', 'CreatedAtUtc') IS NULL
+BEGIN
+    ALTER TABLE dbo.Committees ADD CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_Committees_CreatedAtUtc DEFAULT SYSUTCDATETIME();
+END;
+
 UPDATE dbo.Committees
 SET IsStudentClub = 1
 WHERE IsStudentClub = 0
@@ -651,6 +656,56 @@ BEGIN
         CONSTRAINT FK_TeamJoinRequests_Members_AssignedToMemberId FOREIGN KEY (AssignedToMemberId) REFERENCES dbo.Members (Id) ON DELETE NO ACTION,
         CONSTRAINT FK_TeamJoinRequests_Members_ReviewedByMemberId FOREIGN KEY (ReviewedByMemberId) REFERENCES dbo.Members (Id) ON DELETE NO ACTION
     );
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'CommitteeId') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD CommitteeId uniqueidentifier NULL;
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'NationalId') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD NationalId nvarchar(14) NULL;
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'BirthDate') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD BirthDate date NULL;
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'Experience') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD Experience nvarchar(3000) NULL;
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'Status') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD Status nvarchar(30) NOT NULL CONSTRAINT DF_TeamJoinRequests_Status DEFAULT 'Pending';
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'AdminNotes') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD AdminNotes nvarchar(2000) NULL;
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'AssignedToMemberId') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD AssignedToMemberId uniqueidentifier NULL;
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'ReviewedByMemberId') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD ReviewedByMemberId uniqueidentifier NULL;
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'CreatedAtUtc') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_TeamJoinRequests_CreatedAtUtc DEFAULT SYSUTCDATETIME();
+END;
+
+IF COL_LENGTH('dbo.TeamJoinRequests', 'ReviewedAtUtc') IS NULL
+BEGIN
+    ALTER TABLE dbo.TeamJoinRequests ADD ReviewedAtUtc datetime2 NULL;
 END;
 
 IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_TeamJoinRequests_Status' AND object_id = OBJECT_ID('dbo.TeamJoinRequests'))
