@@ -758,9 +758,14 @@ function JoinRequestView({ onBackToLogin }: { onBackToLogin: () => void }) {
       }
 
       try {
-        const data = await getGovernorateCommittees(joinForm.governorateId, joinApplicationType === 'StudentClub' ? 'club' : 'default');
+        const data = await getGovernorateCommittees(joinForm.governorateId, 'all');
         if (!cancelled) {
-          setJoinCommittees(data);
+          const filteredCommittees = data.filter((committee) =>
+            joinApplicationType === 'StudentClub'
+              ? committee.isStudentClub
+              : !committee.isStudentClub
+          );
+          setJoinCommittees(filteredCommittees);
         }
       } catch {
         if (!cancelled) {
