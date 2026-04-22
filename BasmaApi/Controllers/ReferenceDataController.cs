@@ -210,28 +210,45 @@ WHERE (
             return Forbid();
         }
 
-        var governorate = await _dbContext.Governorates.FirstOrDefaultAsync(item => item.Id == governorateId, cancellationToken);
-        if (governorate is null)
+        async Task<ActionResult<GovernorateResponse>> ExecuteAsync()
         {
-            return NotFound(new { message = "المحافظة غير موجودة." });
+            var governorate = await _dbContext.Governorates.FirstOrDefaultAsync(item => item.Id == governorateId, cancellationToken);
+            if (governorate is null)
+            {
+                return NotFound(new { message = "المحافظة غير موجودة." });
+            }
+
+            var canManageAnyGovernorate = currentMember.Role is MemberRole.President or MemberRole.VicePresident;
+            if (!canManageAnyGovernorate && !IsSameGovernorate(currentMember, governorate))
+            {
+                return Forbid();
+            }
+
+            governorate.IsVisibleInJoinForm = request.IsVisibleInJoinForm;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Join form visibility for governorate {GovernorateId} set to {IsVisibleInJoinForm} by member {MemberId}.",
+                governorateId,
+                governorate.IsVisibleInJoinForm,
+                currentMember.Id);
+
+            return Ok(new GovernorateResponse(governorate.Id, governorate.Name, governorate.IsVisibleInJoinForm));
         }
 
-        var canManageAnyGovernorate = currentMember.Role is MemberRole.President or MemberRole.VicePresident;
-        if (!canManageAnyGovernorate && !IsSameGovernorate(currentMember, governorate))
+        try
         {
-            return Forbid();
+            return await ExecuteAsync();
         }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex, "Governorate join visibility update failed due to schema mismatch. Attempting schema repair. GovernorateId={GovernorateId}", governorateId);
 
-        governorate.IsVisibleInJoinForm = request.IsVisibleInJoinForm;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+            _dbContext.ChangeTracker.Clear();
 
-        _logger.LogInformation(
-            "Join form visibility for governorate {GovernorateId} set to {IsVisibleInJoinForm} by member {MemberId}.",
-            governorateId,
-            governorate.IsVisibleInJoinForm,
-            currentMember.Id);
-
-        return Ok(new GovernorateResponse(governorate.Id, governorate.Name, governorate.IsVisibleInJoinForm));
+            return await ExecuteAsync();
+        }
     }
 
     [HttpPatch("{governorateId:guid}/committees/{committeeId:guid}/join-visibility")]
@@ -249,49 +266,66 @@ WHERE (
             return Forbid();
         }
 
-        var committee = await _dbContext.Committees
-            .Include(item => item.Governorate)
-            .FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
-
-        if (committee is null)
+        async Task<ActionResult<CommitteeResponse>> ExecuteAsync()
         {
-            return NotFound(new { message = "اللجنة غير موجودة." });
-        }
+            var committee = await _dbContext.Committees
+                .Include(item => item.Governorate)
+                .FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
 
-        var canManageAnyGovernorate = currentMember.Role is MemberRole.President or MemberRole.VicePresident;
-        if (!canManageAnyGovernorate)
-        {
-            if (canManageAsCommitteeCoordinator)
+            if (committee is null)
             {
-                if (!IsSameCommittee(currentMember, committee))
+                return NotFound(new { message = "اللجنة غير موجودة." });
+            }
+
+            var canManageAnyGovernorate = currentMember.Role is MemberRole.President or MemberRole.VicePresident;
+            if (!canManageAnyGovernorate)
+            {
+                if (canManageAsCommitteeCoordinator)
+                {
+                    if (!IsSameCommittee(currentMember, committee))
+                    {
+                        return Forbid();
+                    }
+                }
+                else if (committee.Governorate is null || !IsSameGovernorate(currentMember, committee.Governorate))
                 {
                     return Forbid();
                 }
             }
-            else if (!IsSameGovernorate(currentMember, committee.Governorate))
-            {
-                return Forbid();
-            }
+
+            committee.IsVisibleInJoinForm = request.IsVisibleInJoinForm;
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            _logger.LogInformation(
+                "Join form visibility for committee {CommitteeId} in governorate {GovernorateId} set to {IsVisibleInJoinForm} by member {MemberId}.",
+                committeeId,
+                governorateId,
+                committee.IsVisibleInJoinForm,
+                currentMember.Id);
+
+            return Ok(new CommitteeResponse(
+                committee.Id,
+                committee.GovernorateId,
+                committee.Governorate?.Name ?? "غير محددة",
+                committee.Name,
+                committee.IsStudentClub,
+                committee.IsVisibleInJoinForm,
+                committee.CreatedAtUtc));
         }
 
-        committee.IsVisibleInJoinForm = request.IsVisibleInJoinForm;
-        await _dbContext.SaveChangesAsync(cancellationToken);
+        try
+        {
+            return await ExecuteAsync();
+        }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex, "Committee join visibility update failed due to schema mismatch. Attempting schema repair. GovernorateId={GovernorateId} CommitteeId={CommitteeId}", governorateId, committeeId);
 
-        _logger.LogInformation(
-            "Join form visibility for committee {CommitteeId} in governorate {GovernorateId} set to {IsVisibleInJoinForm} by member {MemberId}.",
-            committeeId,
-            governorateId,
-            committee.IsVisibleInJoinForm,
-            currentMember.Id);
+            DatabaseSchemaEnsurer.EnsureReferenceDataSchema(_dbContext);
+            _dbContext.ChangeTracker.Clear();
 
-        return Ok(new CommitteeResponse(
-            committee.Id,
-            committee.GovernorateId,
-            committee.Governorate.Name,
-            committee.Name,
-            committee.IsStudentClub,
-            committee.IsVisibleInJoinForm,
-            committee.CreatedAtUtc));
+            return await ExecuteAsync();
+        }
     }
 
     [HttpPost("{governorateId:guid}/committees")]

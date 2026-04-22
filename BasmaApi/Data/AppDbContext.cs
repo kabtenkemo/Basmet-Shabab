@@ -12,7 +12,8 @@ public sealed class AppDbContext : DbContext
         "Member",
         "MemberTask",
         "Complaint",
-        "JoinRequest"
+        "JoinRequest",
+        "PointTransaction"
     };
 
     private readonly IAuditRequestContextAccessor _auditRequestContextAccessor;
@@ -360,6 +361,12 @@ public sealed class AppDbContext : DbContext
     private void AppendAuditLogs()
     {
         var auditEntries = new List<AuditLog>();
+        var pointTransactionEntries = ChangeTracker.Entries<PointTransaction>()
+            .Where(entry => entry.State is EntityState.Added or EntityState.Modified or EntityState.Deleted)
+            .Cast<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry>()
+            .ToList();
+
+        var pointTransactionMemberNames = GetMemberNamesForPointTransactions(pointTransactionEntries);
 
         foreach (var entry in ChangeTracker.Entries())
         {
@@ -389,11 +396,15 @@ public sealed class AppDbContext : DbContext
             }
 
             var oldValues = entry.State == EntityState.Modified || entry.State == EntityState.Deleted
-                ? CaptureValues(entry, includeCurrentValues: false)
+                ? entry.Entity is PointTransaction
+                    ? CapturePointTransactionValues(entry, includeCurrentValues: false, pointTransactionMemberNames)
+                    : CaptureValues(entry, includeCurrentValues: false)
                 : null;
 
             var newValues = entry.State == EntityState.Added || entry.State == EntityState.Modified
-                ? CaptureValues(entry, includeCurrentValues: true)
+                ? entry.Entity is PointTransaction
+                    ? CapturePointTransactionValues(entry, includeCurrentValues: true, pointTransactionMemberNames)
+                    : CaptureValues(entry, includeCurrentValues: true)
                 : null;
 
             if (entry.State == EntityState.Modified && oldValues is not null && newValues is not null && JsonSerializer.Serialize(oldValues) == JsonSerializer.Serialize(newValues))
@@ -430,7 +441,110 @@ public sealed class AppDbContext : DbContext
             nameof(MemberTask) => "Task",
             nameof(Complaint) => "Complaint",
             nameof(TeamJoinRequest) => "JoinRequest",
+            nameof(PointTransaction) => "Points",
             _ => typeName
+        };
+    }
+
+    private Dictionary<Guid, string> GetMemberNamesForPointTransactions(IReadOnlyCollection<Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry> pointTransactionEntries)
+    {
+        if (pointTransactionEntries.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var memberIds = pointTransactionEntries
+            .SelectMany(GetPointTransactionMemberIds)
+            .Distinct()
+            .ToList();
+
+        if (memberIds.Count == 0)
+        {
+            return new Dictionary<Guid, string>();
+        }
+
+        var memberNames = Members.Local
+            .Where(member => memberIds.Contains(member.Id))
+            .ToDictionary(member => member.Id, member => member.FullName);
+
+        var missingMemberIds = memberIds.Where(id => !memberNames.ContainsKey(id)).ToList();
+        if (missingMemberIds.Count > 0)
+        {
+            var fromDb = Members
+                .AsNoTracking()
+                .Where(member => missingMemberIds.Contains(member.Id))
+                .Select(member => new { member.Id, member.FullName })
+                .ToList();
+
+            foreach (var item in fromDb)
+            {
+                memberNames[item.Id] = item.FullName;
+            }
+        }
+
+        return memberNames;
+    }
+
+    private static IEnumerable<Guid> GetPointTransactionMemberIds(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry)
+    {
+        var ids = new List<Guid>();
+
+        AddIfExists(entry, nameof(PointTransaction.MemberId), includeCurrentValue: true, ids);
+        AddIfExists(entry, nameof(PointTransaction.MemberId), includeCurrentValue: false, ids);
+        AddIfExists(entry, nameof(PointTransaction.RelatedByMemberId), includeCurrentValue: true, ids);
+        AddIfExists(entry, nameof(PointTransaction.RelatedByMemberId), includeCurrentValue: false, ids);
+
+        return ids;
+    }
+
+    private static void AddIfExists(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry, string propertyName, bool includeCurrentValue, List<Guid> ids)
+    {
+        var property = entry.Properties.FirstOrDefault(item => string.Equals(item.Metadata.Name, propertyName, StringComparison.Ordinal));
+        if (property is null)
+        {
+            return;
+        }
+
+        var rawValue = includeCurrentValue ? property.CurrentValue : property.OriginalValue;
+        var value = TryGetGuid(rawValue);
+        if (value.HasValue)
+        {
+            ids.Add(value.Value);
+        }
+    }
+
+    private static Dictionary<string, object?> CapturePointTransactionValues(Microsoft.EntityFrameworkCore.ChangeTracking.EntityEntry entry, bool includeCurrentValues, IReadOnlyDictionary<Guid, string> memberNames)
+    {
+        var values = CaptureValues(entry, includeCurrentValues);
+
+        var targetMemberId = TryGetGuid(includeCurrentValues
+            ? entry.Property(nameof(PointTransaction.MemberId)).CurrentValue
+            : entry.Property(nameof(PointTransaction.MemberId)).OriginalValue);
+
+        var addedByMemberId = TryGetGuid(includeCurrentValues
+            ? entry.Property(nameof(PointTransaction.RelatedByMemberId)).CurrentValue
+            : entry.Property(nameof(PointTransaction.RelatedByMemberId)).OriginalValue);
+
+        values["AddedToMemberId"] = targetMemberId;
+        values["AddedToMemberName"] = targetMemberId.HasValue && memberNames.TryGetValue(targetMemberId.Value, out var targetMemberName)
+            ? targetMemberName
+            : null;
+
+        values["AddedByMemberId"] = addedByMemberId;
+        values["AddedByMemberName"] = addedByMemberId.HasValue && memberNames.TryGetValue(addedByMemberId.Value, out var addedByMemberName)
+            ? addedByMemberName
+            : null;
+
+        return values;
+    }
+
+    private static Guid? TryGetGuid(object? value)
+    {
+        return value switch
+        {
+            Guid guidValue => guidValue,
+            string stringValue when Guid.TryParse(stringValue, out var parsedGuid) => parsedGuid,
+            _ => null
         };
     }
 

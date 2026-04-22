@@ -144,7 +144,7 @@ public sealed class TasksController : ControllerBase
 
         if (task.IsCompleted)
         {
-            await AddCompletionPointsAsync(task.MemberId, "إضافة مهمة مكتملة", cancellationToken);
+            await AddCompletionPointsAsync(task.MemberId, currentMember.Id, "إضافة مهمة مكتملة", cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -236,7 +236,7 @@ public sealed class TasksController : ControllerBase
 
         if (!wasCompleted && task.IsCompleted)
         {
-            await AddCompletionPointsAsync(task.MemberId, $"إكمال المهمة: {task.Title}", cancellationToken);
+            await AddCompletionPointsAsync(task.MemberId, currentMember.Id, $"إكمال المهمة: {task.Title}", cancellationToken);
         }
 
         await _dbContext.SaveChangesAsync(cancellationToken);
@@ -273,7 +273,7 @@ public sealed class TasksController : ControllerBase
         }
 
         task.IsCompleted = true;
-        await AddCompletionPointsAsync(currentMember.Id, $"إتمام المهمة: {task.Title}", cancellationToken);
+        await AddCompletionPointsAsync(currentMember.Id, currentMember.Id, $"إتمام المهمة: {task.Title}", cancellationToken);
 
         await _dbContext.SaveChangesAsync(cancellationToken);
         return Ok(Map(task));
@@ -452,7 +452,7 @@ public sealed class TasksController : ControllerBase
         return (distinctIds, null);
     }
 
-    private async Task AddCompletionPointsAsync(Guid memberId, string reason, CancellationToken cancellationToken)
+    private async Task AddCompletionPointsAsync(Guid memberId, Guid? relatedByMemberId, string reason, CancellationToken cancellationToken)
     {
         var member = await _dbContext.Members.FirstOrDefaultAsync(item => item.Id == memberId, cancellationToken);
         if (member is null)
@@ -465,7 +465,8 @@ public sealed class TasksController : ControllerBase
         {
             MemberId = member.Id,
             Amount = CompletionPoints,
-            Reason = reason
+            Reason = reason,
+            RelatedByMemberId = relatedByMemberId
         });
     }
 }
