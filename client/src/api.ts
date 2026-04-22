@@ -179,6 +179,23 @@ function shouldRetryWithDirectApi(error: unknown) {
     return false;
   }
 
+  const responseHeaders = error.response?.headers as Record<string, string | undefined> | undefined;
+  const cacheStatus = String(responseHeaders?.['cache-status'] ?? '').toLowerCase();
+  const server = String(responseHeaders?.server ?? '').toLowerCase();
+  const hasNetlifyRequestId = Boolean(responseHeaders?.['x-nf-request-id']);
+  const isNetlifyEdgeResponse = hasNetlifyRequestId
+    || cacheStatus.includes('netlify edge')
+    || server.includes('netlify');
+  const isNetlifyRuntime = typeof window !== 'undefined' && window.location.hostname.endsWith(netlifyHostnameSuffix);
+  const requestUrl = String(error.config?.url ?? '').toLowerCase();
+  const isApiRequest = requestUrl.startsWith('/api/');
+
+  // Netlify edge can occasionally return an empty 500 for proxied API calls.
+  // Retry once against the direct API origin before surfacing an error.
+  if (error.response?.status === 500 && (isNetlifyEdgeResponse || (isNetlifyRuntime && isApiRequest))) {
+    return true;
+  }
+
   if (error.response?.status === 404) {
     return true;
   }
