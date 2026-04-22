@@ -535,31 +535,38 @@ WHERE (
             return Forbid();
         }
 
-        var governorate = await _dbContext.Governorates.FirstOrDefaultAsync(item => item.Id == governorateId, cancellationToken);
-        if (governorate is null)
+        async Task<IActionResult> ExecuteDeleteAsync()
         {
-            return NotFound(new { message = "المحافظة غير موجودة." });
-        }
+            var governorate = await _dbContext.Governorates.FirstOrDefaultAsync(item => item.Id == governorateId, cancellationToken);
+            if (governorate is null)
+            {
+                return NotFound(new { message = "المحافظة غير موجودة." });
+            }
 
-        if (currentMember.Role == MemberRole.GovernorCoordinator
-            && !IsSameGovernorate(currentMember, governorate))
-        {
-            return Forbid();
-        }
+            if (currentMember.Role == MemberRole.GovernorCoordinator
+                && !IsSameGovernorate(currentMember, governorate))
+            {
+                return Forbid();
+            }
 
-        var committee = await _dbContext.Committees.FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
-        if (committee is null)
-        {
-            return NotFound(new { message = "اللجنة غير موجودة." });
-        }
+            var committee = await _dbContext.Committees.FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
+            if (committee is null)
+            {
+                return NotFound(new { message = "اللجنة غير موجودة." });
+            }
 
-        try
-        {
             var deleted = await TryDeleteCommitteeAsync(committee, committeeId, cancellationToken);
             if (!deleted)
             {
                 return Conflict(new { message = "لا يمكن حذف اللجنة لوجود بيانات مرتبطة بها." });
             }
+
+            return NoContent();
+        }
+
+        try
+        {
+            return await ExecuteDeleteAsync();
         }
         catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
         {
@@ -570,21 +577,8 @@ WHERE (
 
             _dbContext.ChangeTracker.Clear();
 
-            var committeeAfterRepair = await _dbContext.Committees
-                .FirstOrDefaultAsync(item => item.Id == committeeId && item.GovernorateId == governorateId, cancellationToken);
-            if (committeeAfterRepair is null)
-            {
-                return NotFound(new { message = "اللجنة غير موجودة." });
-            }
-
-            var deleted = await TryDeleteCommitteeAsync(committeeAfterRepair, committeeId, cancellationToken);
-            if (!deleted)
-            {
-                return Conflict(new { message = "لا يمكن حذف اللجنة لوجود بيانات مرتبطة بها." });
-            }
+            return await ExecuteDeleteAsync();
         }
-
-        return NoContent();
     }
 
     private async Task<bool> TryDeleteCommitteeAsync(Committee committee, Guid committeeId, CancellationToken cancellationToken)

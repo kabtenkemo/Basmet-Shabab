@@ -183,6 +183,10 @@ function shouldRetryWithDirectApi(error: unknown) {
     return true;
   }
 
+  if (error.response?.status === 502 || error.response?.status === 503 || error.response?.status === 504) {
+    return true;
+  }
+
   return !error.response && (
     error.code === 'ERR_NETWORK'
     || error.code === 'ECONNREFUSED'
