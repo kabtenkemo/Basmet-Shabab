@@ -96,7 +96,7 @@ builder.Services.AddCors(options =>
         policy
             .SetIsOriginAllowed(IsAllowedOrigin)
             .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
-            .WithHeaders("Content-Type", "Authorization")
+            .AllowAnyHeader()
             .AllowCredentials();
     });
 });

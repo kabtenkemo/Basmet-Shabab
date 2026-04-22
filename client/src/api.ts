@@ -69,10 +69,14 @@ function attachInterceptors(instance: ReturnType<typeof axios.create>) {
   instance.interceptors.request.use((config) => {
     const token = localStorage.getItem(authTokenKey);
     const headers = AxiosHeaders.from(config.headers ?? {});
+    const requestUrl = String(config.url ?? '').toLowerCase();
+    const isLoginRequest = requestUrl.includes('/api/auth/login');
 
     headers.set('Content-Type', 'application/json');
-    if (token) {
+    if (token && !isLoginRequest) {
       headers.set('Authorization', `Bearer ${token}`);
+    } else {
+      headers.delete('Authorization');
     }
 
     config.headers = headers;
