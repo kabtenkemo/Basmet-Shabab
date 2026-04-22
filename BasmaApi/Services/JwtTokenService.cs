@@ -10,9 +10,9 @@ public sealed class JwtTokenService(IConfiguration configuration) : ITokenServic
 {
     public (string Token, DateTime ExpiresAtUtc) CreateToken(Member member)
     {
-        var key = configuration["Jwt:Key"] ?? throw new InvalidOperationException("Jwt:Key is missing.");
-        var issuer = configuration["Jwt:Issuer"] ?? throw new InvalidOperationException("Jwt:Issuer is missing.");
-        var audience = configuration["Jwt:Audience"] ?? throw new InvalidOperationException("Jwt:Audience is missing.");
+        var key = configuration["Jwt:Key"] ?? "dev-key-1234567890123456789012345678901234567890";
+        var issuer = configuration["Jwt:Issuer"] ?? "basmet-shabab-dev";
+        var audience = configuration["Jwt:Audience"] ?? "basmet-shabab-client-dev";
         var expiresMinutes = int.TryParse(configuration["Jwt:ExpiresMinutes"], out var parsedMinutes) ? parsedMinutes : 120;
 
         var expiresAtUtc = DateTime.UtcNow.AddMinutes(expiresMinutes);

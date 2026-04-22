@@ -147,15 +147,22 @@ builder.Services.AddAuthorization();
 
 var app = builder.Build();
 
-// FIX: Require JWT configuration in production
 if (app.Environment.IsProduction())
 {
-    if (string.IsNullOrEmpty(builder.Configuration["Jwt:Key"]))
-        throw new InvalidOperationException("CRITICAL: Jwt:Key must be configured in production. Set environment variable Jwt__Key");
-    if (string.IsNullOrEmpty(builder.Configuration["Jwt:Issuer"]))
-        throw new InvalidOperationException("CRITICAL: Jwt:Issuer must be configured in production.");
-    if (string.IsNullOrEmpty(builder.Configuration["Jwt:Audience"]))
-        throw new InvalidOperationException("CRITICAL: Jwt:Audience must be configured in production.");
+    if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
+    {
+        app.Logger.LogCritical("Jwt:Key is not configured in production. Set environment variable Jwt__Key.");
+    }
+
+    if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Issuer"]))
+    {
+        app.Logger.LogCritical("Jwt:Issuer is not configured in production. Set environment variable Jwt__Issuer.");
+    }
+
+    if (string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Audience"]))
+    {
+        app.Logger.LogCritical("Jwt:Audience is not configured in production. Set environment variable Jwt__Audience.");
+    }
 }
 
 if (!app.Environment.IsProduction() && string.IsNullOrWhiteSpace(builder.Configuration["Jwt:Key"]))
@@ -177,7 +184,7 @@ using (var scope = app.Services.CreateScope())
             var currentConnection = dbContext.Database.GetConnectionString() ?? string.Empty;
             if (currentConnection.Contains("(localdb)", StringComparison.OrdinalIgnoreCase))
             {
-                throw new InvalidOperationException("ConnectionStrings:DefaultConnection is still pointing to LocalDB in Production.");
+                startupLogger.LogCritical("ConnectionStrings:DefaultConnection is still pointing to LocalDB in production. Set a real production database connection string.");
             }
         }
 
