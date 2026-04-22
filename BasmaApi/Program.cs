@@ -79,10 +79,22 @@ builder.Services.AddCors(options =>
 {
     options.AddPolicy("ClientApp", policy =>
     {
+        static bool IsAllowedOrigin(string origin)
+        {
+            if (!Uri.TryCreate(origin, UriKind.Absolute, out var uri))
+            {
+                return false;
+            }
+
+            var host = uri.Host;
+            return string.Equals(origin, "http://localhost:5173", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
+                || host.EndsWith(".netlify.app", StringComparison.OrdinalIgnoreCase);
+        }
+
         policy
-            .WithOrigins(
-                "http://localhost:5173",
-                "https://basmet-shabab.netlify.app")
+            .SetIsOriginAllowed(IsAllowedOrigin)
             .WithMethods("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS")
             .WithHeaders("Content-Type", "Authorization")
             .AllowCredentials();
@@ -434,7 +446,35 @@ static void EnsureMemberIdentityColumns(AppDbContext dbContext)
 
 static void EnsureMemberSecuritySchema(AppDbContext dbContext)
 {
-    dbContext.Database.ExecuteSqlRaw("IF COL_LENGTH('dbo.Members', 'MustChangePassword') IS NULL ALTER TABLE dbo.Members ADD MustChangePassword bit NOT NULL CONSTRAINT DF_Members_MustChangePassword DEFAULT 0;");
+    dbContext.Database.ExecuteSqlRaw(@"
+IF COL_LENGTH('dbo.Members', 'MustChangePassword') IS NULL
+BEGIN
+    ALTER TABLE dbo.Members ADD MustChangePassword bit NOT NULL CONSTRAINT DF_Members_MustChangePassword DEFAULT 0;
+END;
+
+IF OBJECT_ID('dbo.PermissionGrants', 'U') IS NULL
+BEGIN
+    CREATE TABLE dbo.PermissionGrants (
+        Id uniqueidentifier NOT NULL CONSTRAINT PK_PermissionGrants PRIMARY KEY,
+        MemberId uniqueidentifier NOT NULL,
+        PermissionKey nvarchar(120) NOT NULL,
+        GrantedByMemberId uniqueidentifier NOT NULL,
+        GrantedAtUtc datetime2 NOT NULL CONSTRAINT DF_PermissionGrants_GrantedAtUtc DEFAULT SYSUTCDATETIME(),
+        CONSTRAINT FK_PermissionGrants_Members_MemberId FOREIGN KEY (MemberId) REFERENCES dbo.Members (Id) ON DELETE CASCADE,
+        CONSTRAINT FK_PermissionGrants_Members_GrantedByMemberId FOREIGN KEY (GrantedByMemberId) REFERENCES dbo.Members (Id) ON DELETE NO ACTION
+    );
+END;
+
+IF COL_LENGTH('dbo.PermissionGrants', 'GrantedAtUtc') IS NULL
+BEGIN
+    ALTER TABLE dbo.PermissionGrants ADD GrantedAtUtc datetime2 NOT NULL CONSTRAINT DF_PermissionGrants_GrantedAtUtc DEFAULT SYSUTCDATETIME();
+END;
+
+IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_PermissionGrants_MemberId_PermissionKey' AND object_id = OBJECT_ID('dbo.PermissionGrants'))
+BEGIN
+    CREATE UNIQUE INDEX IX_PermissionGrants_MemberId_PermissionKey ON dbo.PermissionGrants (MemberId, PermissionKey);
+END;
+");
 }
 
 static void EnsureComplaintAuditSchema(AppDbContext dbContext)

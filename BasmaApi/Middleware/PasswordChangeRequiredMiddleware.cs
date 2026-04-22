@@ -1,6 +1,7 @@
 using BasmaApi.Data;
 using BasmaApi.Services;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 
 namespace BasmaApi.Middleware;
 
@@ -36,11 +37,51 @@ public sealed class PasswordChangeRequiredMiddleware
             return;
         }
 
-        var mustChangePassword = await dbContext.Members
-            .AsNoTracking()
-            .Where(member => member.Id == memberId.Value)
-            .Select(member => member.MustChangePassword)
-            .FirstOrDefaultAsync(context.RequestAborted);
+        bool mustChangePassword;
+        try
+        {
+            mustChangePassword = await dbContext.Members
+                .AsNoTracking()
+                .Where(member => member.Id == memberId.Value)
+                .Select(member => member.MustChangePassword)
+                .FirstOrDefaultAsync(context.RequestAborted);
+        }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex,
+                "Password-change middleware detected schema mismatch. Attempting lightweight repair and continuing request. MemberId={MemberId}",
+                memberId.Value);
+
+            try
+            {
+                dbContext.Database.ExecuteSqlRaw(
+                    "IF COL_LENGTH('dbo.Members', 'MustChangePassword') IS NULL ALTER TABLE dbo.Members ADD MustChangePassword bit NOT NULL CONSTRAINT DF_Members_MustChangePassword DEFAULT 0;");
+            }
+            catch (SqlException repairEx)
+            {
+                _logger.LogWarning(repairEx,
+                    "Password-change middleware could not repair schema automatically. Continuing without password-change enforcement for this request. MemberId={MemberId}",
+                    memberId.Value);
+            }
+
+            await _next(context);
+            return;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex,
+                "Password-change middleware failed unexpectedly. Returning 503 instead of 500. MemberId={MemberId}",
+                memberId.Value);
+
+            context.Response.StatusCode = StatusCodes.Status503ServiceUnavailable;
+            context.Response.ContentType = "application/json";
+            await context.Response.WriteAsJsonAsync(new
+            {
+                message = "تعذر التحقق من حالة كلمة المرور حاليًا. يرجى المحاولة بعد قليل.",
+                traceId = context.TraceIdentifier
+            }, context.RequestAborted);
+            return;
+        }
 
         if (!mustChangePassword)
         {

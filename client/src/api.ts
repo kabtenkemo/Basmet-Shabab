@@ -51,8 +51,10 @@ function resolveBaseUrl() {
       return '';
     }
 
-    if (isNetlify && (!normalizedConfigured || normalizedConfigured === productionApiBaseUrl)) {
-      return '';
+    // Netlify edge proxy can intermittently return empty 500 responses for /api rewrites.
+    // Prefer direct API origin unless an explicit VITE_API_BASE_URL is provided.
+    if (isNetlify && !normalizedConfigured) {
+      return productionApiBaseUrl;
     }
   }
 
