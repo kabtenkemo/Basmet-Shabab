@@ -739,8 +739,18 @@ END";
             return null;
         }
 
-        return await _dbContext.Members
-            .Include(member => member.PermissionGrants)
-            .FirstOrDefaultAsync(member => member.Id == memberId.Value, cancellationToken);
+        try
+        {
+            return await _dbContext.Members
+                .Include(member => member.PermissionGrants)
+                .FirstOrDefaultAsync(member => member.Id == memberId.Value, cancellationToken);
+        }
+        catch (Exception ex) when (DatabaseSchemaEnsurer.IsSchemaMismatch(ex))
+        {
+            _logger.LogWarning(ex, "Failed to load member permission grants due to schema mismatch. Falling back to member-only load. MemberId={MemberId}", memberId.Value);
+
+            return await _dbContext.Members
+                .FirstOrDefaultAsync(member => member.Id == memberId.Value, cancellationToken);
+        }
     }
 }
