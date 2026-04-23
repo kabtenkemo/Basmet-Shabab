@@ -51,10 +51,10 @@ function resolveBaseUrl() {
       return '';
     }
 
-    // Netlify edge proxy can intermittently return empty 500 responses for /api rewrites.
-    // Prefer direct API origin unless an explicit VITE_API_BASE_URL is provided.
-    if (isNetlify && !normalizedConfigured) {
-      return productionApiBaseUrl;
+    // On Netlify, always use same-origin /api rewrite to avoid browser CORS/preflight
+    // issues and direct TLS reachability differences across user networks.
+    if (isNetlify) {
+      return '';
     }
   }
 
@@ -195,6 +195,11 @@ function shouldRetryWithDirectApi(error: unknown) {
   const isNetlifyRuntime = typeof window !== 'undefined' && window.location.hostname.endsWith(netlifyHostnameSuffix);
   const requestUrl = String(error.config?.url ?? '').toLowerCase();
   const isApiRequest = requestUrl.startsWith('/api/');
+
+  // Keep Netlify traffic on same-origin proxy path to avoid cross-origin fallback loops.
+  if (isNetlifyRuntime) {
+    return false;
+  }
 
   // Netlify edge can occasionally return an empty 500 for proxied API calls.
   // Retry once against the direct API origin before surfacing an error.
