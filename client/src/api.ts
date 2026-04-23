@@ -42,6 +42,10 @@ function resolveBaseUrl() {
   const configured = env.VITE_API_BASE_URL?.trim();
   const normalizedConfigured = configured ? configured.replace(/\/+$/, '') : '';
 
+  if (normalizedConfigured) {
+    return normalizedConfigured;
+  }
+
   if (typeof window !== 'undefined') {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
@@ -51,15 +55,11 @@ function resolveBaseUrl() {
       return '';
     }
 
-    // On Netlify, always use same-origin /api rewrite to avoid browser CORS/preflight
-    // issues and direct TLS reachability differences across user networks.
+    // On Netlify, prefer the direct API origin because same-origin /api requests can
+    // be intercepted by the edge and return an empty 500 before reaching the backend.
     if (isNetlify) {
-      return '';
+      return productionApiBaseUrl;
     }
-  }
-
-  if (normalizedConfigured) {
-    return normalizedConfigured;
   }
 
   return productionApiBaseUrl;
