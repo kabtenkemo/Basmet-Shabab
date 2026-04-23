@@ -97,16 +97,6 @@ BEGIN
     ALTER TABLE dbo.Committees ADD CreatedAtUtc datetime2 NOT NULL CONSTRAINT DF_Committees_CreatedAtUtc DEFAULT SYSUTCDATETIME();
 END;
 
-UPDATE dbo.Committees
-SET IsStudentClub = 1
-WHERE IsStudentClub = 0
-    AND (
-            LOWER(Name) LIKE '%club%'
-            OR Name LIKE N'%نادي%'
-            OR Name LIKE N'%النوادي%'
-            OR Name LIKE N'%طلابي%'
-    );
-
 IF COL_LENGTH('dbo.Members', 'GovernorateId') IS NULL ALTER TABLE dbo.Members ADD GovernorateId uniqueidentifier NULL;
 IF COL_LENGTH('dbo.Members', 'CommitteeId') IS NULL ALTER TABLE dbo.Members ADD CommitteeId uniqueidentifier NULL;
 IF COL_LENGTH('dbo.Members', 'GovernorName') IS NULL ALTER TABLE dbo.Members ADD GovernorName nvarchar(120) NULL;
@@ -121,6 +111,18 @@ IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'IX_Committees_Governorate
 BEGIN
     CREATE UNIQUE INDEX IX_Committees_GovernorateId_Name ON dbo.Committees (GovernorateId, Name);
 END;
+");
+
+        dbContext.Database.ExecuteSqlRaw(@"
+UPDATE dbo.Committees
+SET IsStudentClub = 1
+WHERE IsStudentClub = 0
+    AND (
+            LOWER(Name) LIKE '%club%'
+            OR Name LIKE N'%نادي%'
+            OR Name LIKE N'%النوادي%'
+            OR Name LIKE N'%طلابي%'
+    );
 ");
     }
 
