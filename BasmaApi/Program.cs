@@ -7,6 +7,7 @@ using BasmaApi.Services;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.Data.SqlClient;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.IdentityModel.Tokens;
@@ -59,10 +60,21 @@ builder.Services.AddSwaggerGen(options =>
 builder.Services.AddDbContext<AppDbContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    var isProduction = builder.Environment.IsProduction();
+
     options.UseSqlServer(connectionString, sqlOptions =>
     {
-        sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
-        sqlOptions.CommandTimeout(30);
+        if (isProduction)
+        {
+            // Fail fast in production when DB/network is unavailable so API returns controlled errors instead of hanging.
+            sqlOptions.EnableRetryOnFailure(1, TimeSpan.FromSeconds(2), null);
+            sqlOptions.CommandTimeout(10);
+        }
+        else
+        {
+            sqlOptions.EnableRetryOnFailure(5, TimeSpan.FromSeconds(10), null);
+            sqlOptions.CommandTimeout(30);
+        }
     });
     options.ConfigureWarnings(warnings => warnings.Ignore(RelationalEventId.PendingModelChangesWarning));
 });
@@ -199,6 +211,22 @@ using (var scope = app.Services.CreateScope())
             {
                 startupLogger.LogCritical("ConnectionStrings:DefaultConnection is still pointing to LocalDB in production. Set a real production database connection string.");
             }
+        }
+
+        var skipInitializationWhenDatabaseUnavailable = app.Configuration
+            .GetValue<bool?>("Startup:SkipInitializationWhenDatabaseUnavailable") ?? true;
+        var databaseProbeTimeoutSeconds = Math.Clamp(
+            app.Configuration.GetValue<int?>("Startup:DatabaseProbeTimeoutSeconds") ?? 6,
+            2,
+            30);
+
+        if (skipInitializationWhenDatabaseUnavailable
+            && !CanReachDatabaseQuickly(dbContext, startupLogger, databaseProbeTimeoutSeconds))
+        {
+            startupLogger.LogWarning(
+                "Database quick probe failed (timeout={TimeoutSeconds}s). Skipping startup DB initialization to keep API responsive.",
+                databaseProbeTimeoutSeconds);
+            goto SkipDatabaseInitialization;
         }
 
         try
@@ -430,12 +458,42 @@ using (var scope = app.Services.CreateScope())
             startupLogger.LogError(presidentialEx, "Failed to initialize President account. Continuing startup.");
             // Don't throw - let app start so we can diagnose
         }
+
+    SkipDatabaseInitialization:
+        ;
     }
     catch (Exception ex)
     {
         startupLogger.LogCritical(ex, "Critical error during startup initialization.");
         startupLogger.LogWarning("Application is starting despite initialization errors. Some features may be unavailable.");
         // Don't throw - allow app to start for diagnostics
+    }
+}
+
+static bool CanReachDatabaseQuickly(AppDbContext dbContext, ILogger logger, int timeoutSeconds)
+{
+    var connectionString = dbContext.Database.GetConnectionString();
+    if (string.IsNullOrWhiteSpace(connectionString))
+    {
+        logger.LogWarning("Database quick probe skipped because connection string is empty.");
+        return false;
+    }
+
+    try
+    {
+        var builder = new SqlConnectionStringBuilder(connectionString)
+        {
+            ConnectTimeout = timeoutSeconds
+        };
+
+        using var connection = new SqlConnection(builder.ConnectionString);
+        connection.Open();
+        return true;
+    }
+    catch (Exception ex)
+    {
+        logger.LogWarning(ex, "Database quick probe failed.");
+        return false;
     }
 }
 
