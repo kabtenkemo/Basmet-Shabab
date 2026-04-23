@@ -90,7 +90,8 @@ builder.Services.AddCors(options =>
             return string.Equals(origin, "http://localhost:5173", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(host, "localhost", StringComparison.OrdinalIgnoreCase)
                 || string.Equals(host, "127.0.0.1", StringComparison.OrdinalIgnoreCase)
-                || host.EndsWith(".netlify.app", StringComparison.OrdinalIgnoreCase);
+                || host.EndsWith(".netlify.app", StringComparison.OrdinalIgnoreCase)
+                || string.Equals(host, "basmet-shabab.netlify.app", StringComparison.OrdinalIgnoreCase);
         }
 
         policy
@@ -789,3 +790,4 @@ app.UseAuthorization();
 app.MapControllers();
 
 app.Run();
+
