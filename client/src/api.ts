@@ -149,6 +149,10 @@ function getErrorMessage(error: unknown) {
     }
 
     if (error.response?.status === 500) {
+      const requestUrl = String(error.config?.url ?? '').toLowerCase();
+      if (requestUrl.includes('/api/auth/login')) {
+        return 'تعذر تسجيل الدخول الآن بسبب خطأ في الخادم. الخادم قد يكون في حالة إعادة تشغيل — حاول مرة أخرى بعد دقيقة.';
+      }
       return 'حدث خطأ في الخادم. يرجى المحاولة مرة أخرى لاحقًا.';
     }
 
@@ -195,23 +199,27 @@ function shouldRetryWithDirectApi(error: unknown) {
   const isNetlifyRuntime = typeof window !== 'undefined' && window.location.hostname.endsWith(netlifyHostnameSuffix);
   const requestUrl = String(error.config?.url ?? '').toLowerCase();
   const isApiRequest = requestUrl.startsWith('/api/');
-
-  // Keep Netlify traffic on same-origin proxy path to avoid cross-origin fallback loops.
+  const status = error.response?.status;
+  const isServerError = typeof status === 'number' && status >= 500 && status <= 504;
+  
+  // On Netlify, the proxy layer can mask transient upstream issues as 5xx even when
+  // the direct origin is reachable. Allow a one-shot cross-origin fallback for 5xx
+  // responses — the backend CORS policy permits *.netlify.app, so this is safe.
   if (isNetlifyRuntime) {
-    return false;
-  }
+    return isApiRequest && isServerError;
+}
 
   // Netlify edge can occasionally return an empty 500 for proxied API calls.
   // Retry once against the direct API origin before surfacing an error.
-  if (error.response?.status === 500 && (isNetlifyEdgeResponse || (isNetlifyRuntime && isApiRequest))) {
+  if (status === 500 && (isNetlifyEdgeResponse || (isNetlifyRuntime && isApiRequest))) {
     return true;
   }
 
-  if (error.response?.status === 404) {
+  if (status === 404) {
     return true;
   }
 
-  if (error.response?.status === 502 || error.response?.status === 503 || error.response?.status === 504) {
+  if (status === 502 || status === 503 || status === 504) {
     return true;
   }
 
