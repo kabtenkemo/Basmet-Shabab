@@ -36,6 +36,7 @@ const authTokenKey = 'team-management-token';
 const unauthorizedEventName = 'basma:unauthorized';
 const isLocalRuntime = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const netlifyHostnameSuffix = '.netlify.app';
+const vercelHostnameSuffix = '.vercel.app';
 
 function resolveBaseUrl() {
   const env = import.meta.env as Record<string, string | undefined>;
@@ -46,6 +47,7 @@ function resolveBaseUrl() {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
     const isNetlify = hostname.endsWith(netlifyHostnameSuffix);
+    const isVercel = hostname.endsWith(vercelHostnameSuffix);
 
     if (isLocalhost) {
       return '';
@@ -53,7 +55,7 @@ function resolveBaseUrl() {
 
     // On Netlify, always use same-origin /api rewrite to avoid browser CORS/preflight
     // issues and direct TLS reachability differences across user networks.
-    if (isNetlify) {
+    if (isNetlify || isVercel) {
       return '';
     }
   }
