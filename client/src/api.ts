@@ -275,11 +275,14 @@ export function getUnauthorizedEventName() {
 }
 
 export async function login(email: string, password: string) {
-  return request<AuthResponse>({
+  return unwrap(
+    directApi.request<AuthResponse>({
     method: 'POST',
     url: '/api/auth/login',
     data: { email: email.trim().toLowerCase(), password }
-  });
+    }),
+    null
+  );
 }
 
 export async function changePassword(currentPassword: string, newPassword: string) {
