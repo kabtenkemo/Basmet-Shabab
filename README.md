@@ -77,7 +77,7 @@
 - **React Icons** UI Icons
 
 ### Deployment
-- **Netlify** Frontend (https://basmet-shabab.netlify.app)
+- **Vercel** Frontend (https://basmet-shabab.vercel.app)
 - **runasp.net** Backend (IIS Hosted)
 - **SQL Server** hosted database
 
@@ -205,11 +205,11 @@ Suggestions (مقترحات)
 
 ## 🌐 النشر Deployment
 
-### على Netlify (Frontend):
+### على Vercel (Frontend):
 ```bash
 cd client
 npm run build
-git push origin main  # Automatic deployment
+git push origin main  # Automatic deployment on Vercel
 ```
 
 ### على runasp.net (Backend):

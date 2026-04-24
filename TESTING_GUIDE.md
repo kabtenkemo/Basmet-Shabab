@@ -108,7 +108,7 @@ ORDER BY TimestampUtc DESC
 
 ## 🚀 نشر الإصلاحات - Deployment
 
-### على Netlify (Frontend):
+### على Vercel (Frontend):
 ```bash
 cd client
 npm run build
@@ -128,13 +128,12 @@ dotnet publish -c Release
 
 ### Development (.env):
 ```env
-VITE_API_URL=http://localhost:5000
+VITE_API_BASE_URL=http://localhost:5000
 ```
 
-### Production (runasp.net settings):
+### Production (Vercel settings):
 ```env
-VITE_API_URL=https://basmet-shabab.netlify.app/api
-# (يتم الوصول عبر proxy)
+VITE_API_BASE_URL=https://basmet-shabab.runasp.net
 ```
 
 ---

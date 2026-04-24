@@ -242,12 +242,12 @@ dotnet publish -c Release
 cd client
 npm run build
 git push origin main
-# Automatic deployment on Netlify
+# Automatic deployment on Vercel
 ```
 
 ### 4. التحقق من الحالة
 - [ ] Backend: https://api.basmet-shabab.local/swagger
-- [ ] Frontend: https://basmet-shabab.netlify.app
+- [ ] Frontend: https://basmet-shabab.vercel.app
 - [ ] Database: Connected ✅
 
 ---
