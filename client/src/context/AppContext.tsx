@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState, type PropsWithChildren } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import {
   adjustPoints,
   changePassword as submitPasswordChangeRequest,
@@ -237,6 +237,7 @@ export function AppProvider({ children }: PropsWithChildren) {
   const [unreadActivityCount, setUnreadActivityCount] = useState(0);
   const [notice, setNotice] = useState<{ title: string; description: string; tone: ActivityLogEntry['tone'] } | null>(null);
   const [section, setSection] = useState<SectionKey>('overview');
+  const loginInFlightRef = useRef(false);
   const theme: ThemeMode = 'dark';
   const [search, setSearch] = useState(defaultSearch);
   const [loading, setLoading] = useState(false);
@@ -494,6 +495,11 @@ export function AppProvider({ children }: PropsWithChildren) {
   }, [loadSession, token]);
 
   const loginUser = useCallback(async (email: string, password: string) => {
+    if (loginInFlightRef.current) {
+      return;
+    }
+
+    loginInFlightRef.current = true;
     setLoading(true);
     setError('');
     try {
@@ -554,6 +560,7 @@ export function AppProvider({ children }: PropsWithChildren) {
       throw loginError;
     } finally {
       setLoading(false);
+      loginInFlightRef.current = false;
     }
   }, []);
 
