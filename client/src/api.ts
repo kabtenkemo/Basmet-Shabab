@@ -36,6 +36,7 @@ const authTokenKey = 'team-management-token';
 const unauthorizedEventName = 'basma:unauthorized';
 const isLocalRuntime = typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
 const netlifyHostnameSuffix = '.netlify.app';
+const vercelHostnameSuffix = '.vercel.app';
 
 function resolveBaseUrl() {
   const env = import.meta.env as Record<string, string | undefined>;
@@ -46,14 +47,15 @@ function resolveBaseUrl() {
     const hostname = window.location.hostname;
     const isLocalhost = hostname === 'localhost' || hostname === '127.0.0.1';
     const isNetlify = hostname.endsWith(netlifyHostnameSuffix);
+    const isVercel = hostname.endsWith(vercelHostnameSuffix);
 
     if (isLocalhost) {
       return '';
     }
 
-    // On Netlify, always use same-origin /api rewrite to avoid browser CORS/preflight
-    // issues and direct TLS reachability differences across user networks.
-    if (isNetlify) {
+    // On Netlify and Vercel, always use same-origin /api handling to avoid browser
+    // CORS/preflight issues and edge-to-origin reachability differences.
+    if (isNetlify || isVercel) {
       return '';
     }
   }
@@ -275,13 +277,13 @@ export function getUnauthorizedEventName() {
 }
 
 export async function login(email: string, password: string) {
-  return unwrap(
-    directApi.request<AuthResponse>({
+  return request<AuthResponse>(
+    {
     method: 'POST',
     url: '/api/auth/login',
     data: { email: email.trim().toLowerCase(), password }
-    }),
-    null
+    },
+    false
   );
 }
 
